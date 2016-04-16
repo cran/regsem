@@ -4,23 +4,6 @@
 using namespace Rcpp;
 using namespace arma;
 
-
-
-//' Calculates the gradient vector based on Von Oertzen \& Brick, 2014
-//'
-//' @param par vector with parameters.
-//' @param ImpCov expected covariance matrix.
-//' @param SampCov Sample covariance matrix.
-//' @param Areg A matrix with current parameter estimates.
-//' @param Sreg S matrix with current parameter estimates.
-//' @param A A matrix with parameter labels.
-//' @param S S matrix with parameter labels.
-//' @param F F matrix.
-//' @param lambda penalty value.
-//' @param type2 penalty type.
-//' @param pen_vec parameter indicators to be penalized.
-//' @param diff_par parameter values to take deviations from.
-//'
 // [[Rcpp::export]]
 
 arma::vec rcpp_grad_ram(arma::vec par,

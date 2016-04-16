@@ -695,7 +695,7 @@ if(optMethod=="nlminb"){
 
     res$Imp_Cov <- Imp_Cov
 
-    res$grad <- grad(as.numeric(pars.df))
+    #res$grad <- grad(as.numeric(pars.df))
     #### KKT conditions #####
     if(gradFun=="none"){
       res$KKT1 = "grad not specified"
@@ -793,9 +793,14 @@ if(optMethod=="nlminb"){
     res$N = nobs
     res$nfac = nfac
 
+    if(model@Fit@converged == FALSE){
+      res$baseline.chisq = NA
+      res$baseline.df = NA
+    }else{
+      res$baseline.chisq = fitMeasures(model)["baseline.chisq"]
+      res$baseline.df = fitMeasures(model)["baseline.df"]
+    }
 
-    res$baseline.chisq = fitMeasures(model)["baseline.chisq"]
-    res$baseline.df = fitMeasures(model)["baseline.df"]
     #res$grad <- grad(res$par.ret)
 
     #res$hess <- hess(res$par.ret)

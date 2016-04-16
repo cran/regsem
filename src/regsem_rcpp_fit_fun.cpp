@@ -5,15 +5,6 @@ using namespace Rcpp;
 using namespace arma;
 
 
-//' Calculates the objective function values.
-//'
-//' @param ImpCov expected covariance matrix.
-//' @param SampCov Sample covariance matrix.
-//' @param type2 penalty type.
-//' @param lambda penalty value.
-//' @param pen_vec vector of penalized parameters.
-//' @param pen_diff Vector of values to take deviation from.
-//'
 // [[Rcpp::export]]
 double rcpp_fit_fun(Rcpp::NumericMatrix ImpCov,
                  Rcpp::NumericMatrix SampCov,

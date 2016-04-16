@@ -1,25 +1,3 @@
-#'
-#'
-#' Calculates gradient using forward difference method.
-#' @param par vector with parameters.
-#' @param ImpCov expected covariance matrix.
-#' @param SampCov Sample covariance matrix.
-#' @param Areg A matrix with current parameter estimates.
-#' @param Sreg S matrix with current parameter estimates.
-#' @param A A matrix with parameter labels.
-#' @param S S matrix with parameter labels.
-#' @param F F matrix.
-#' @param A_fixed A matrix with fixed indicators.
-#' @param A_est A matrix with parameter estimates.
-#' @param S_fixed S matrix with fixed indicators.
-#' @param S_est S matrix with parameter estimates.
-#' @param lambda penalty value.
-#' @param type penalty type.
-#' @param pars_pen parameter indicators to be penalized.
-#' @param I Identity matrix.
-
-
-
 
 grad_fun = function(par,ImpCov,SampCov,Areg,Sreg,A,S,F,
                     A_fixed,A_est,S_fixed,S_est,lambda,type,pars_pen,I){
