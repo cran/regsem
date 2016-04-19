@@ -95,10 +95,10 @@
 #' mod <- '
 #' f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
 #' '
-#' outt = cfa(mod,HS)
+#' # Recommended to specify meanstructure in lavaan
+#' outt = cfa(mod,HS,meanstructure=TRUE)
 #'
-#' fit1 <- regsem(outt,lambda=0.1,type="lasso",optMethod="nlminb",
-#'                gradFun="ram")
+#' fit1 <- regsem(outt,lambda=0.1,type="lasso",gradFun="ram")
 
 
 
@@ -119,6 +119,17 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="nlminb
                  missing="listwise"){
 
 
+    if(gradFun=="norm"){
+      stop("Only recommended grad function is ram or none at this time")
+    }
+
+  if(type=="ridge" & gradFun != "none"){
+    warning("At this time, only gradFun=none recommended with ridge penalties")
+  }
+
+  if(type=="lasso" & gradFun != "ram"){
+    warning("At this time, only gradFun=ram recommended with lasso penalties")
+  }
 
     parL = parTable(model)[,"label"]
     if(sum(duplicated(parL[parL != ""])) > 0){
@@ -288,7 +299,7 @@ if(fac.type=="cfa"){
 
   if(calc == "normal"){
     calc = function(start){
-         mult = suppressWarnings(rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I))
+         mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
          #mult = RAMmult(par=start,A,S,F,A_fixed,A_est,S_fixed,S_est)
          pen_vec = c(mult$A_est22[A %in% pars_pen],mult$S_est22[S %in% pars_pen])
          if(type=="diff_lasso"){
@@ -298,7 +309,7 @@ if(fac.type=="cfa"){
          }
          if(calc_fit=="cov"){
            #fit = fit_fun(ImpCov=mult$ImpCov,SampCov,Areg=mult$A_est22,lambda,alpha,type,pen_vec)
-           fit = suppressWarnings(rcpp_fit_fun(ImpCov=mult$ImpCov,SampCov,type2,lambda,pen_vec,pen_diff))
+           fit = rcpp_fit_fun(ImpCov=mult$ImpCov,SampCov,type2,lambda,pen_vec,pen_diff)
            fit
          }else if(calc_fit=="ind"){
            #stop("Not currently supported")
@@ -349,7 +360,7 @@ if(fac.type=="cfa"){
   if(gradFun=="norm"){
     grad = function(start){
 
-                mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
+      mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
                 #mult = RAMmult(par=start,A,S,F,A_fixed,A_est,S_fixed,S_est)
                 ret = grad_fun(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
                                Sreg=mult$S_est22,A,A_fixed,A_est,S,S_fixed,S_est,
@@ -359,15 +370,15 @@ if(fac.type=="cfa"){
 } else if(gradFun=="ram"){
     grad = function(start){
 
-      mult = suppressWarnings(rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I))
+      mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
       #mult = RAMmult(par=start,A,S,F,A_fixed,A_est,S_fixed,S_est)
-      #  ret = grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
-      #                 Sreg=mult$S_est22,A,S,
+     #   ret = grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
+     #                  Sreg=mult$S_est22,A,S,
       #                  F,lambda,type,pars_pen,diff_par)
       #pen_vec = c(mult$A_est22[A %in% pars_pen],mult$S_est22[S %in% pars_pen])
-       ret = suppressWarnings(rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
-                         Sreg=mult$S_est22,A,S,
-                         F,lambda,type2=type2,pars_pen,diff_par=0))
+       ret = rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
+                       Sreg=mult$S_est22,A,S,
+                         F,lambda,type2=type2,pars_pen,diff_par=0)
       ret
     }
 
@@ -460,8 +471,8 @@ if(optMethod=="nlminb"){
         #res$iterations <- out$iterations
       }else if(hessFun=="none"){
        #LB = c(rep(-6,max(A)),rep(1e-6,rep(-10,max(S)-max(diag(S))),max(diag(S))-max(A)))
-        out <- nlminb(start,calc,grad,lower=LB,upper=UB,eval.max=max.iter,
-                      iter.max=max.iter)
+        out <- nlminb(start,calc,grad,lower=LB,upper=UB,control=list(eval.max=max.iter,
+                                                                     iter.max=max.iter))
         res$out <- out
         res$convergence = out$convergence
         #res$optim_fit <- out$objective
@@ -482,7 +493,7 @@ if(optMethod=="nlminb"){
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
        out <- nlminb(start,calc,grad,lower=LB,upper=UB,
                      control=list(eval.max=max.iter,
-                     iter.max=max.iter)) #,x.tol=1.5e-6
+                     iter.max=max.iter,step.min=0.0000001)) #,x.tol=1.5e-6
         res$out <- out
         #res$optim_fit <- out$objective
         res$convergence = out$convergence
@@ -492,7 +503,8 @@ if(optMethod=="nlminb"){
     }else if(gradFun=="none"){
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
         out <- nlminb(start,calc,lower=LB,upper=UB,control=list(eval.max=max.iter,
-                                                                 iter.max=max.iter))
+                                                                 iter.max=max.iter,
+                                                                step.min=0.0000001))
         res$out <- out
         #res$optim_fit <- out$objective
         res$convergence = out$convergence
@@ -557,6 +569,7 @@ if(optMethod=="nlminb"){
         out <- optimx::optimx(start,calc,grad,hess,method=subOpt,lower=LB,upper=UB,control=list(starttests=FALSE))
         res$out <- out
         #res$iterations <- out$fevals
+
         res$convergence = out$convcode
         par.ret <- coef(out)
       }else if(hessFun=="none"){
@@ -585,7 +598,7 @@ if(optMethod=="nlminb"){
     }else if(gradFun=="ram"){
       if(hessFun=="ram"){
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
-        out <- optimx::optimx(start,calc,grad,hess,method=subOpt,lower=LB,upper=UB,control=list(starttests=FALSE))
+        out <- optimx::optimx(start,calc,grad,hess,method=subOpt,lower=LB,upper=UB,control=list(starttests=FALSE,itnmax = max.iter))
         res$out <- out
         #res$optim_fit <- out$value
         res$convergence = out$convcode
@@ -684,13 +697,15 @@ if(optMethod=="nlminb"){
     #res$ftt = rcpp_RAMmult(par=as.numeric(pars.df),A,S,S_fixed,A_fixed,A_est,S_est,F,I)
       # get Implied Covariance matrix
 
-    Imp_Cov <- rcpp_RAMmult(par=as.numeric(pars.df),A,S,S_fixed,A_fixed,A_est,S_est,F,I)$ImpCov
+    Imp_Cov1 <- rcpp_RAMmult(par=as.numeric(pars.df),A,S,S_fixed,A_fixed,A_est,S_est,F,I)$ImpCov
     #Imp_Cov <- RAMmult(par=as.numeric(pars.df),A,S,F,A_fixed,A_est,S_fixed,S_est)$ImpCov
 
 
 
     if(length(model@ParTable$op[model@ParTable$op == "~1"]) > 0 & missing=="listwise"){
-      Imp_Cov = Imp_Cov[1:(nrow(Imp_Cov)-1),1:(ncol(Imp_Cov)-1)] - SampMean %*% t(SampMean)
+      Imp_Cov = Imp_Cov1[1:(nrow(Imp_Cov1)-1),1:(ncol(Imp_Cov1)-1)] - SampMean %*% t(SampMean)
+    }else{
+      Imp_Cov = Imp_Cov1
     }
 
     res$Imp_Cov <- Imp_Cov
@@ -782,11 +797,15 @@ if(optMethod=="nlminb"){
 
     }
     if(missing == "listwise"){
-      SampCov <- model@SampleStats@cov[][[1]]
-      res$SampCov = SampCov
-      res$fit = 0.5*(log(det(Imp_Cov)) + trace(SampCov %*% solve(Imp_Cov)) -
-                     log(det(SampCov))  - nvar)
+     # SampCov <- model@SampleStats@cov[][[1]]
+    #  res$SampCov = SampCov
+      #res$fit = 0.5*(log(det(Imp_Cov1)) + trace(SampCov %*% solve(Imp_Cov1)) -
+       #              log(det(SampCov))  - nvar)
+      res$fit = rcpp_fit_fun(Imp_Cov1, SampCov,type2=0,lambda=0,pen_vec=0,pen_diff=0)
     }
+
+    SampCov <- model@SampleStats@cov[][[1]]
+    res$SampCov = SampCov
 
     res$coefficients <- round(pars.df,3)
     res$nvar = nvar

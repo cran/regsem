@@ -50,25 +50,51 @@
 #' @keywords multiple optim
 #' @export
 #' @examples
+#' \dontrun{
 #'
-#' library(lavaan)
+#' library(regsem)
 #' HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 #' mod <- '
 #' f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
 #' '
-#' outt = cfa(mod,HS)
+#' outt = cfa(mod,HS,meanstructure=TRUE)
 #'
 #' fit1 <- multi_optim(outt,max.try=40,
 #'                    lambda=0.1,type="lasso",
-#'                    optMethod="nlminb", gradFun="ram")
+#'                    gradFun="ram")
 #'
+#'
+#'# growth model
+#'model <- ' i =~ 1*t1 + 1*t2 + 1*t3 + 1*t4
+#'           s =~ 0*t1 + s1*t2 + s2*t3 + 3*t4 '
+#'fit <- growth(model, data=Demo.growth)
+#'summary(fit)
+#'fitmeasures(fit)
+
+#'fit3 <- multi_optim(fit,lambda=0.2,type="ridge",gradFun="none")
+#'summary(fit3)
+#'}
 
 
 multi_optim <- function(model,max.try=10,lambda,
                          LB=-Inf,UB=Inf,type,optMethod="nlminb",gradFun="ram",
                          pars_pen=NULL,diff_par=NULL,hessFun="none",
                         verbose=TRUE,warm.start=FALSE,Start2=NULL,
-                        tol=1e-6,max.iter=300){
+                        tol=1e-6,max.iter=50000){
+
+
+
+  if(gradFun=="norm"){
+    stop("Only recommended grad function is ram or none at this time")
+  }
+
+  if(type=="ridge" & gradFun != "none"){
+    warning("At this time, only gradFun=none recommended with ridge penalties")
+  }
+
+  if(type=="lasso" & gradFun != "ram"){
+    warning("At this time, only gradFun=ram recommended with lasso penalties")
+  }
 
 
 if(warm.start==TRUE){
@@ -113,9 +139,9 @@ if(warm.start==TRUE){
         }#else if(warm.start==TRUE){
          # start.optim <- rep(0,length(start.vals))
          # for(i in 1:length(start.vals)){
-          #  start.optim[i] <- as.numeric(start.vals[i]) + rnorm(1,0,0.02)
+         #   start.optim[i] <- as.numeric(start.vals[i]) + rnorm(1,0,0.02)
          # }
-        #}
+       # }
 
 
         fit1 <- suppressWarnings(try(regsem(model,lambda=lambda,type=type,optMethod=optMethod,
@@ -126,8 +152,13 @@ if(warm.start==TRUE){
           mtt[n.optim,1] = NA
           mtt[n.optim,2] = NA
         }else{
-          mtt[n.optim,1] = fit1$out$objective
-          mtt[n.optim,2] = fit1$out$convergence
+          if(optMethod=="nlminb"){
+            mtt[n.optim,1] = fit1$out$objective
+            mtt[n.optim,2] = fit1$out$convergence
+          }else{
+            mtt[n.optim,1] = fit1$out$value
+            mtt[n.optim,2] = fit1$out$convcode
+          }
         }
       }
       mtt
