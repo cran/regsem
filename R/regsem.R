@@ -22,7 +22,7 @@
 #'        parameter estimates and some pre-specified values. The values
 #'        to take the deviation from are specified in diff_par.
 #' @param data Optional dataframe. Only required for missing="fiml" which
-#'        is not currently working well.
+#'        is not currently working.
 #' @param optMethod Solver to use. Recommended options include "nlminb" and
 #'        "optimx". Note: for "optimx", the default method is to use nlminb.
 #'        This can be changed in subOpt.
@@ -57,10 +57,12 @@
 #'        when using regularization. It greatly increases the chances of
 #'        converging.
 #' @param UB Upper bound vector
+#' @param block Whether to use block coordinate descent
 #' @param calc Type of calc function to use with means or not. Not recommended
 #'        for use.
-#' @param tol Absolute tolerance for convergence.
-#' @param max.iter Max iterations for optimization.
+#' @param nlminb.control list of control values to pass to nlminb
+#' @param max.iter Number of iterations for coordinate descent
+#' @param tol Tolerance for coordinate descent
 #' @param missing How to handle missing data. Current options are "listwise"
 #'        and "fiml". "fiml" is not currently working well.
 #' @return out List of return values from optimization program
@@ -98,13 +100,13 @@
 #' # Recommended to specify meanstructure in lavaan
 #' outt = cfa(mod,HS,meanstructure=TRUE)
 #'
-#' fit1 <- regsem(outt,lambda=0.1,type="lasso",gradFun="ram")
+#' fit1 <- regsem(outt,lambda=0.1,type="lasso",Start=extractMatrices(outt)$parameters)
 
 
 
 
 
-regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="nlminb",
+regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="default",
                  gradFun="ram",hessFun="none",parallel="no",Start="default",
                  subOpt="nlminb",longMod=F,
                  optNL="NLOPT_LN_NEWUOA_BOUND",fac.type="cfa",
@@ -113,10 +115,37 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="nlminb
                  diff_par=NULL,
                  LB=-Inf,
                  UB=Inf,
+                 block=TRUE,
                  calc="normal",
-                 tol=1e-6,
-                 max.iter=150,
+                 max.iter=200,
+                 tol=1e-5,
+                 nlminb.control=list(),
                  missing="listwise"){
+
+  if(optMethod=="default" & type=="lasso"){
+      optMethod<-"coord_desc"
+  }
+
+  if(optMethod=="default" & type!="lasso"){
+    optMethod <- "nlminb"
+  }
+
+  if(optMethod!="nlminb" & optMethod !="coord_desc"){
+    stop("only optmethod==nlminb or coord_desc is currently supported well")
+  }
+
+  if(optMethod=="nlminb"& type=="lasso"){
+    warning("ONly optMethod=coord_desc is recommended for use with lasso")
+  }
+
+  if(length(nlminb.control)==0){
+    nlminb.control <- list(abs.tol=1e-4,
+                    iter.max=60000,
+                    eval.max=60000,
+                    rel.tol=1e-4,
+                    x.tol=1e-4,xf.tol=1e-4,
+                    xf.tol=1e-4)
+  }
 
 
   if(missing=="fiml" & is.null(model@SampleStats@missing[[1]])){
@@ -132,12 +161,16 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="nlminb
   }
 
 
-    if(gradFun=="norm"){
-      stop("Only recommended grad function is ram or none at this time")
-    }
+  #  if(gradFun=="norm"){
+  #    stop("Only recommended grad function is ram or none at this time")
+ #   }
 
   if(type=="ridge" & gradFun != "none"){
     warning("At this time, only gradFun=none recommended with ridge penalties")
+  }
+
+  if(type=="ridge" & optMethod != "nlminb"){
+    stop("For ridge, only use optMethod=nlminb and gradFun=none")
   }
 
   if(type=="lasso" & gradFun != "ram"){
@@ -168,9 +201,15 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="nlminb
 
 
 
+      # get mediation parameters
+      if(any(is.na(extractMatrices(model)$mediation))==FALSE){
+        mediation_vals <- extractMatrices(model)$mediation
+      }else{
+        mediation_vals <- NA
+      }
 
 
-
+      mats = extractMatrices(model)
 
       if(extractMatrices(model)$mean == TRUE){
         mm = extractMatrices(model)$A[,"1"]
@@ -219,6 +258,7 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="nlminb
     }else if(type=="diff_lasso"){
       type2=3
     }
+
 
 
 
@@ -414,13 +454,19 @@ if(fac.type=="cfa"){
 
       mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
       #mult = RAMmult(par=start,A,S,F,A_fixed,A_est,S_fixed,S_est)
-     #   ret = grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
-     #                  Sreg=mult$S_est22,A,S,
-      #                  F,lambda,type,pars_pen,diff_par)
-      #pen_vec = c(mult$A_est22[A %in% pars_pen],mult$S_est22[S %in% pars_pen])
-       ret = rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
+
+      if(optMethod=="coord_desc"){
+        ret = grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
                        Sreg=mult$S_est22,A,S,
-                         F,lambda,type2=type2,pars_pen,diff_par=0)
+                       F,lambda,type,pars_pen,diff_par)
+      }else{
+        pen_vec = c(mult$A_est22[A %in% pars_pen],mult$S_est22[S %in% pars_pen])
+           ret = rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
+                           Sreg=mult$S_est22,A,S,
+                             F,lambda,type2=type2,pars_pen,diff_par=0)
+        }
+
+
       ret
     }
 
@@ -524,19 +570,27 @@ if(optMethod=="nlminb"){
     }else if(gradFun=="ram"){
       if(hessFun=="ram"){
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
-       out <- nlminb(start,calc,grad,hess,lower=LB,upper=UB,control=list(eval.max=max.iter,
-                                                                         iter.max=max.iter))
+       out <- nlminb(start,calc,grad,hess,lower=LB,upper=UB,control=nlminb.control)
         res$out <- out
         #res$optim_fit <- out$objective
         res$convergence = out$convergence
         par.ret <- out$par
         #res$iterations <- out$iterations
+      }else if(hessFun=="norm"){
+        #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
+        out <- nlminb(start,calc,grad,hess,lower=LB,upper=UB,control=nlminb.control)
+        res$out <- out
+        #res$optim_fit <- out$objective
+        res$convergence = out$convergence
+        res$iteration = out$iterations
+        par.ret <- out$par
+        #res$iterations <- out$iterations
       }else if(hessFun=="none"){
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
        out <- nlminb(start,calc,grad,lower=LB,upper=UB,
-                     control=list(eval.max=max.iter,
-                     iter.max=max.iter,step.min=0.0000001)) #,x.tol=1.5e-6
+                     control=nlminb.control) #,x.tol=1.5e-6
         res$out <- out
+        res$iteration = out$iterations
         #res$optim_fit <- out$objective
         res$convergence = out$convergence
         par.ret <- out$par
@@ -544,9 +598,7 @@ if(optMethod=="nlminb"){
       }
     }else if(gradFun=="none"){
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
-        out <- nlminb(start,calc,lower=LB,upper=UB,control=list(eval.max=max.iter,
-                                                                 iter.max=max.iter,
-                                                                step.min=0.0000001))
+        out <- nlminb(start,calc,lower=LB,upper=UB,control=nlminb.control)
         res$out <- out
         #res$optim_fit <- out$objective
         res$convergence = out$convergence
@@ -574,8 +626,7 @@ if(optMethod=="nlminb"){
       }
     }else if(gradFun=="none"){
       #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
-      out <- nlminb(start,calc,lower=LB,upper=UB,eval.max=max.iter,
-                    iter.max=max.iter)
+      out <- nlminb(start,calc,lower=LB,upper=UB,control=nlminb.control)
       res$out <- out
       #res$optim_fit <- out$objective
       res$convergence = out$convergence
@@ -585,8 +636,7 @@ if(optMethod=="nlminb"){
       if(hessFun=="numDeriv"){
         warning("numDeriv does not seem to be accurate at this time")
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
-        out <- nlminb(start,calc,grad,hess,lower=LB,upper=UB,eval.max=max.iter,
-                      iter.max=max.iter)
+        out <- nlminb(start,calc,grad,hess,lower=LB,upper=UB,control=nlminb.control)
         res$out <- out
         #res$optim_fit <- out$objective
         res$convergence = out$convergence
@@ -595,8 +645,7 @@ if(optMethod=="nlminb"){
       }else if(hessFun=="none"){
         warning("numDeriv does not seem to be accurate at this time")
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
-        out <- nlminb(start,calc,lower=LB,upper=UB,gradient=grad,eval.max=max.iter,
-                      iter.max=max.iter)
+        out <- nlminb(start,calc,lower=LB,upper=UB,gradient=grad,,control=nlminb.control)
         res$out <- out
         #res$optim_fit <- out$objective
         res$convergence = out$convergence
@@ -697,12 +746,14 @@ if(optMethod=="nlminb"){
   res$optim_fit <- 10 - summary(out)$fitness
   res$convergence = 0
   res$par.ret <- summary(out)$solution
-}else if(optMethod=="optim_rj"){
-  out = optim_rj(start=start,func=calc,grad=grad,hess=hess,tol=tol,max.iter=max.iter)
+}else if(optMethod=="coord_desc"){
+  out = coord_desc(start=start,func=calc,grad=grad,hess=hess,
+                   pars_pen=pars_pen,model=model,max.iter=max.iter,
+                   lambda=lambda,mats=mats,block=block,tol=tol)
   res$out <- out
   res$optim_fit <- out$value
   res$convergence = out$convergence
-  res$par.ret <- out$pars
+  par.ret <- out$pars
   res$iterations <- out$iterations
 }
 
@@ -752,7 +803,13 @@ if(optMethod=="nlminb"){
 
     res$Imp_Cov <- Imp_Cov
 
-    res$logl_sat <- as.numeric(fitmeasures(model)["unrestricted.logl"])
+
+
+     # N = nobs; p=nvar; SampCov00 <- model@SampleStats@cov[][[1]]
+     # c <- N*p/2 * log(2 * pi)
+      #res$logl_sat <- -c -(N/2) * log(det(SampCov00)) - (N/2)*p
+
+      res$logl_sat <- as.numeric(fitmeasures(model)["unrestricted.logl"])
 
     #res$grad <- grad(as.numeric(pars.df))
     #### KKT conditions #####
@@ -871,6 +928,65 @@ if(optMethod=="nlminb"){
     #res$grad <- grad(res$par.ret)
 
    # res$hess <- hess(as.numeric(res$par.ret))
+    if(any(is.na(mediation_vals))==FALSE){
+
+      rettt = rcpp_RAMmult(par=as.numeric(pars.df),A,S,S_fixed,A_fixed,A_est,S_est,F,I)
+       A_est <- rettt$A_est22
+       S_est <- rettt$S_est22
+       #A_new <- A
+
+       #S_new <- S
+
+     ppars <- mediation_vals$pars.mult
+
+     #mediation_vals
+
+
+
+    parT <- lavaan::parTable(model)
+
+    par.labels <- parT$free > 0 & parT$label != ""
+    val <- rep(NA,nrow(parT[par.labels,]))
+
+    for(i in 1:nrow(parT[par.labels,])){
+      par <- parT$label[i]
+      par.num <- parT$free[i]
+
+
+        if(any(A==par.num)){
+        val[i] <- round(A_est[A==par.num],3)
+        }else if(any(S==par.num)){
+        val[i] <- round(S_est[S==par.num],3)
+        }
+    }
+
+    labs <- parT$label[par.labels]
+
+    for(i in length(labs):1){
+      for(j in 1:length(ppars)){
+        ppars[j] <- gsub(labs[i],val[i],ppars[j])
+      }
+    }
+
+   return.vals <- rep(NA,length(ppars))
+   for(i in 1:length(ppars)){
+     return.vals[i] <- eval(parse(text=ppars[i]))
+   }
+
+
+   ppars <- mediation_vals$pars.mult
+
+   for(i in 1:length(ppars)){
+     first <- paste("=",return.vals[i])
+     ppars[i] <- paste(ppars[i],first)
+   }
+
+   res$mediation <- ppars
+   res$mediation_vals <- return.vals
+
+
+    }
+
 
 
     if(res$convergence != 0){

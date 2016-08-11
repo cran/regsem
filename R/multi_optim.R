@@ -45,13 +45,12 @@
 #' @param warm.start Whether start values are based on previous iteration.
 #'        This is not recommended.
 #' @param Start2 Provided starting values. Not required
-#' @param tol absolute tolerance for convergence.
-#' @param max.iter max iterations for optimization.
+#' @param nlminb.control list of control values to pass to nlminb
 #' @keywords multiple optim
 #' @export
 #' @examples
 #' \dontrun{
-#'
+#' # Note that this is not currently recommend. Use regsem() instead
 #' library(regsem)
 #' HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 #' mod <- '
@@ -77,12 +76,12 @@
 
 
 multi_optim <- function(model,max.try=10,lambda,
-                         LB=-Inf,UB=Inf,type,optMethod="nlminb",gradFun="ram",
+                         LB=-Inf,UB=Inf,type,optMethod="default",gradFun="ram",
                          pars_pen=NULL,diff_par=NULL,hessFun="none",
-                        verbose=TRUE,warm.start=FALSE,Start2=NULL,
-                        tol=1e-6,max.iter=50000){
+                        verbose=FALSE,warm.start=FALSE,Start2=NULL,
+                        nlminb.control=NULL){
 
-
+  warning("Note it is not currently recommended to use multi_optim")
 
   if(gradFun=="norm"){
     stop("Only recommended grad function is ram or none at this time")
@@ -112,13 +111,18 @@ multi_optim <- function(model,max.try=10,lambda,
  #         rnorm(length(extractMatrices(model)$parameters),0,0.05)
   #    }
 
-  }
+    }
+
+  mats <- extractMatrices(model)
+
+  val1 = max(mats$A)
+  val2 = max(mats$S) - max(mats$A)
 
   sss = seq(1,max.try)
 
     mult_run <- function(model,n.try=1,lambda,LB=-Inf,
                          UB=Inf,type,optMethod,warm.start,
-                         gradFun,n.optim,pars_pen,
+                         gradFun,n.optim,pars_pen,nlminb.control,
                          diff_par,hessFun,Start2){
       mtt = matrix(NA,n.try,3)
       mtt[,3] = round(runif(n.try,1,99999))
@@ -130,8 +134,12 @@ multi_optim <- function(model,max.try=10,lambda,
 
         if(warm.start==FALSE){
           if(is.null(Start2)){
-            start.optim = rep(0.5,length(extractMatrices(model)$parameters)) +
-              rnorm(length(extractMatrices(model)$parameters),0,0.05)
+
+
+
+            start.optim = c(rep(0,val1) + rnorm(val1,0,0.1),abs(rep(0.5,val2) + rnorm(val2,0,0.1)))
+
+
           }else{
             start.optim = Start2
           }
@@ -148,8 +156,9 @@ multi_optim <- function(model,max.try=10,lambda,
 
 
         fit1 <- suppressWarnings(try(regsem(model,lambda=lambda,type=type,optMethod=optMethod,
-                                            Start=start.optim,gradFun=gradFun,hessFun=hessFun,max.iter=max.iter,
-                                            LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par,tol=tol),silent=T))
+                                            Start=start.optim,gradFun=gradFun,hessFun=hessFun,
+                                            nlminb.control=nlminb.control,
+                                            LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par),silent=T))
 
         if(inherits(fit1, "try-error")) {
           mtt[n.optim,1] = NA
@@ -157,7 +166,7 @@ multi_optim <- function(model,max.try=10,lambda,
           start.vals = NULL
 
           if(warm.start == TRUE){
-            start.vals <- rep(0.5,length(extractMatrices(model)$parameters)) +
+            start.vals <- extractMatrices(model)$parameters +
               rnorm(length(extractMatrices(model)$parameters),0,0.05)
           }
         }else{
@@ -188,10 +197,19 @@ iter.optim = iter.optim + 1
 
 
     ret.mult = mult_run(model,n.try=1,lambda=lambda,LB,UB,type,warm.start=warm.start,
+                        nlminb.control=nlminb.control,
                     optMethod=optMethod,gradFun=gradFun,n.optim=iter.optim,Start2=Start2,
                     pars_pen=pars_pen,diff_par=diff_par,hessFun=hessFun)
 
-    Start2 = ret.mult$start.vals
+
+
+    if(warm.start == TRUE & ret.mult$mtt[1,1] > 0){
+      Start2 = ret.mult$start.vals +
+        c(rep(0,val1) + rnorm(val1,0,0.01),abs(rep(0,val2) + rnorm(val2,0,0.001)))
+    }else{
+      Start2 = c(rep(0,val1) + rnorm(val1,0,0.1),abs(rep(0.5,val2) + rnorm(val2,0,0.1)))
+    }
+
     outt = ret.mult$mtt
 
 
@@ -223,8 +241,15 @@ iter.optim = iter.optim + 1
       }
     }
    # if(exists("fit1")==FALSE){
+
+      if(warm.start==TRUE){
+        Start=Start2
+      }else{
+        Start="default"
+      }
       fit1 <- suppressWarnings(regsem(model,lambda=lambda,type=type,optMethod=optMethod,
-                     Start="default",gradFun=gradFun,hessFun=hessFun,tol=tol,
+                     Start=Start,gradFun=gradFun,hessFun=hessFun,
+                     nlminb.control=nlminb.control,
                      LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par))
 
         fit1$convergence <- 99
@@ -233,9 +258,9 @@ iter.optim = iter.optim + 1
 
 
 
-    #if(fit1$convergence != 0){
+    if(fit1$convergence != 0){
       warning("WARNING: Model did not converge! It is recommended to increase max.try")
-    #}
+    }
 
 }
 
