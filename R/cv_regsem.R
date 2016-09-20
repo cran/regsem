@@ -35,6 +35,12 @@
 #' @param nlminb.control list of control values to pass to nlminb
 #' @param max.iter Number of iterations for coordinate descent
 #' @param tol Tolerance for coordinate descent
+#' @param solver Whether to use solver for coord_desc
+#' @param solver.maxit Max iterations for solver in coord_desc
+#' @param alpha.inc Whether alpha should increase for coord_desc
+#' @param step Step size
+#' @param momentum Logical for coord_desc
+#' @param step.ratio Ratio of step size between A and S. Logical
 #' @param warm.start Whether start values are based on previous iteration.
 #'        This is not recommended.
 #' @param missing How to handle missing data. Current options are "listwise"
@@ -71,7 +77,7 @@ cv_regsem = function(model,
                     test.cov=NULL,
                     parallel=FALSE,
                     ncore=2,
-                    Start="default",
+                    Start="lavaan",
                     subOpt="nlminb",
                     longMod=F,
                     optNL="NLOPT_LN_NEWUOA_BOUND",
@@ -83,8 +89,14 @@ cv_regsem = function(model,
                     UB=Inf,
                     block=TRUE,
                     calc="normal",
-                    max.iter=200,
+                    max.iter=2000,
                     tol=1e-5,
+                    solver=FALSE,
+                    solver.maxit=5,
+                    alpha.inc=TRUE,
+                    step=.5,
+                    momentum=FALSE,
+                    step.ratio=FALSE,
                     nlminb.control=list(),
                     warm.start=FALSE,
                     missing="listwise",
@@ -102,7 +114,7 @@ cv_regsem = function(model,
 
 
 if(parallel==FALSE){
-par.matrix <- matrix(0,n.lambda,model@Fit@npar)
+par.matrix <- matrix(0,n.lambda,length(extractMatrices(model)$parameters))
 fits <- matrix(NA,n.lambda,length(fit.ret)+2)
 SHRINK = 0
 count = 0
@@ -131,6 +143,13 @@ if(mult.start==FALSE){
                    LB=LB,
                    UB=UB,
                    calc=calc,
+                   tol=tol,
+                    solver=solver,
+                  solver.maxit=solver.maxit,
+                  alpha.inc=alpha.inc,
+                  step=step,
+                  momentum=momentum,
+                  step.ratio=step.ratio,
                    nlminb.control=nlminb.control,
                    missing=missing)
 
@@ -138,11 +157,18 @@ if(mult.start==FALSE){
   }else if(mult.start==TRUE){
    out <- multi_optim(model=model,max.try=multi.iter,lambda=SHRINK,
                       LB=LB,UB=UB,type=type,optMethod=optMethod,
-                      gradFun=gradFun,hessFun=hessFun,nlminb.control=nlminb.control,
+                      gradFun=gradFun,hessFun=hessFun,
+                      tol=tol,
+                      solver=solver,
+                      solver.maxit=solver.maxit,
+                      alpha.inc=alpha.inc,
+                      step=step,
+                      momentum=momentum,
+                      step.ratio=step.ratio,nlminb.control=nlminb.control,
                       pars_pen=pars_pen,diff_par=NULL,warm.start=warm.start)
   }
-
-
+  #print(pars_pen)
+ # pars_pen <- out$pars_pen
   #if(any(fit.ret2 == "test")==TRUE){
   #  fits[[count]]$test = NA #fit_indices(out,CV=TRUE)[fit.ret]
   #}else
@@ -180,7 +206,7 @@ if(mult.start==FALSE){
 
   colnames(par.matrix) = names(out$coefficients)
   colnames(fits) <- c("lambda","conv",fit.ret)
-  out <- list(par.matrix,fits)
+  out2 <- list(par.matrix,fits,pars_pen)
  # ret
 
 }
@@ -216,6 +242,13 @@ if(mult.start==FALSE){
                     UB=UB,
                     calc=calc,
                     nlminb.control=nlminb.control,
+                    tol=tol,
+                    solver=solver,
+                    solver.maxit=solver.maxit,
+                    alpha.inc=alpha.inc,
+                    step=step,
+                    momentum=momentum,
+                    step.ratio=step.ratio,
                     missing=missing)
 
 
@@ -223,6 +256,13 @@ if(mult.start==FALSE){
       out <- multi_optim(model=model,max.try=multi.iter,lambda=SHRINK,
                          LB=LB,UB=UB,type=type,optMethod=optMethod,
                          gradFun=gradFun,hessFun=hessFun,nlminb.control=nlminb.control,
+                         tol=tol,
+                         solver=solver,
+                         solver.maxit=solver.maxit,
+                         alpha.inc=alpha.inc,
+                         step=step,
+                         momentum=momentum,
+                         step.ratio=step.ratio,
                          pars_pen=pars_pen,diff_par=NULL,warm.start=warm.start)
     }
 
@@ -288,18 +328,19 @@ if(mult.start==FALSE){
   snowfall::sfStop()
 
   #out
+  pars_pen <- out$pars_pen
 
-  out <- unlist(ret)
-  out <- matrix(out,nrow=n.lambda,ncol=length(ret[[1]]),byrow=T)
+  out2 <- unlist(ret)
+  out2 <- matrix(out,nrow=n.lambda,ncol=length(ret[[1]]),byrow=T)
   nam <- names(extractMatrices(model)$parameters)
-  colnames(out) <- c("lambda","conv",fit.ret,nam)
-  out
+  colnames(out2) <- c("lambda","conv",fit.ret,nam)
+  out2
 
 
 
 }
 #fits = fit_indices(out,CV=FALSE)
-
-out
+out2$pars_pen <- pars_pen
+out2
 
 }

@@ -58,11 +58,18 @@
 #'        converging.
 #' @param UB Upper bound vector
 #' @param block Whether to use block coordinate descent
+#' @param full Whether to do full gradient descent or block
 #' @param calc Type of calc function to use with means or not. Not recommended
 #'        for use.
 #' @param nlminb.control list of control values to pass to nlminb
 #' @param max.iter Number of iterations for coordinate descent
 #' @param tol Tolerance for coordinate descent
+#' @param solver Whether to use solver for coord_desc
+#' @param solver.maxit Max iterations for solver in coord_desc
+#' @param alpha.inc Whether alpha should increase for coord_desc
+#' @param step Step size
+#' @param momentum Logical for coord_desc
+#' @param step.ratio Ratio of step size between A and S. Logical
 #' @param missing How to handle missing data. Current options are "listwise"
 #'        and "fiml". "fiml" is not currently working well.
 #' @return out List of return values from optimization program
@@ -90,6 +97,7 @@
 #' @import Rcpp
 #' @import lavaan
 #' @importFrom stats cov na.omit nlminb pchisq rnorm runif sd uniroot var weighted.mean
+#' @importFrom graphics abline lines plot
 #' @export
 #' @examples
 #' library(lavaan)
@@ -100,14 +108,15 @@
 #' # Recommended to specify meanstructure in lavaan
 #' outt = cfa(mod,HS,meanstructure=TRUE)
 #'
-#' fit1 <- regsem(outt,lambda=0.1,type="lasso",Start=extractMatrices(outt)$parameters)
+#' fit1 <- regsem(outt,lambda=0.05,type="lasso",pars_pen=c(1:2,6:8))
+#' #summary(fit1)
 
 
 
 
 
 regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="default",
-                 gradFun="ram",hessFun="none",parallel="no",Start="default",
+                 gradFun="ram",hessFun="none",parallel="no",Start="lavaan",
                  subOpt="nlminb",longMod=F,
                  optNL="NLOPT_LN_NEWUOA_BOUND",fac.type="cfa",
                  matrices="extractMatrices",
@@ -116,17 +125,24 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
                  LB=-Inf,
                  UB=Inf,
                  block=TRUE,
+                 full=FALSE,
                  calc="normal",
-                 max.iter=200,
+                 max.iter=500,
                  tol=1e-5,
+                 solver=FALSE,
+                 solver.maxit=5,
+                 alpha.inc=TRUE,
+                 step=.5,
+                 momentum=FALSE,
+                 step.ratio=FALSE,
                  nlminb.control=list(),
                  missing="listwise"){
 
-  if(optMethod=="default" & type=="lasso"){
+  if(optMethod=="default" & type=="lasso" | type=="diff_lasso"){
       optMethod<-"coord_desc"
   }
 
-  if(optMethod=="default" & type!="lasso"){
+  if(optMethod=="default" & type!="lasso" | type=="diff_lasso"){
     optMethod <- "nlminb"
   }
 
@@ -135,7 +151,7 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
   }
 
   if(optMethod=="nlminb"& type=="lasso"){
-    warning("ONly optMethod=coord_desc is recommended for use with lasso")
+    stop("ONly optMethod=coord_desc is recommended for use with lasso")
   }
 
   if(length(nlminb.control)==0){
@@ -143,7 +159,7 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
                     iter.max=60000,
                     eval.max=60000,
                     rel.tol=1e-4,
-                    x.tol=1e-4,xf.tol=1e-4,
+                    x.tol=1e-4,
                     xf.tol=1e-4)
   }
 
@@ -152,13 +168,13 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
     stop("need to change missing=fiml in lavaan")
   }
 
-  if(gradFun != "none" & missing=="fiml"){
-    stop("only gradFun = none is supported with missing data")
-  }
+#  if(gradFun != "none" & missing=="fiml"){
+#    stop("only gradFun = none is supported with missing data")
+#  }
 
-  if(model@Data@nobs[[1]] != model@Data@norig[[1]]){
-    warning("regsem is currently not working well in the presence of missing data")
-  }
+#  if(model@Data@nobs[[1]] != model@Data@norig[[1]]){
+#    warning("regsem is currently not working well in the presence of missing data")
+#  }
 
 
   #  if(gradFun=="norm"){
@@ -169,18 +185,22 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
     warning("At this time, only gradFun=none recommended with ridge penalties")
   }
 
-  if(type=="ridge" & optMethod != "nlminb"){
-    stop("For ridge, only use optMethod=nlminb and gradFun=none")
-  }
+ # if(type=="ridge" & optMethod != "nlminb"){
+ #   stop("For ridge, only use optMethod=nlminb and gradFun=none")
+ # }
 
-  if(type=="lasso" & gradFun != "ram"){
+  if(type=="lasso"  & gradFun != "ram"){
     warning("At this time, only gradFun=ram recommended with lasso penalties")
   }
 
-    parL = parTable(model)[,"label"]
-    if(sum(duplicated(parL[parL != ""])) > 0){
-      stop("regsem currently does not allow equality constraints")
-    }
+
+  if(type=="diff_lasso"  & gradFun != "ram"){
+    warning("At this time, only gradFun=ram recommended with lasso penalties")
+  }
+ #   parL = parTable(model)[,"label"]
+  #  if(sum(duplicated(parL[parL != ""])) > 0){
+ #     stop("regsem currently does not allow equality constraints")
+ #   }
 
 
   if(model@SampleStats@ngroups > 1){
@@ -189,9 +209,9 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
 
 
 
+    sat.lik <- as.numeric(fitmeasures(model)["unrestricted.logl"])
 
-
-
+    mats = extractMatrices(model)
     nvar = model@pta$nvar[[1]][1]
     nfac = model@pta$nfac[[1]][1]
 
@@ -208,8 +228,12 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
         mediation_vals <- NA
       }
 
+      if(missing=="listwise"){
+        SampCov <- model@SampleStats@cov[][[1]]
+      }else{
+        SampCov <- model@implied$cov[[1]]
+      }
 
-      mats = extractMatrices(model)
 
       if(extractMatrices(model)$mean == TRUE){
         mm = extractMatrices(model)$A[,"1"]
@@ -218,13 +242,13 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
         ss = match(names(mm[mm > 0]),model@Data@ov$name)
         SampMean[-c(ss)] = 0
 
-        SampCov1 <- model@SampleStats@cov[][[1]]
-        SampCov2 <- SampCov1 + SampMean%*%t(SampMean)
+
+        SampCov2 <- SampCov + SampMean%*%t(SampMean)
         # try changing size of SampCov
         SampCov3 = cbind(SampCov2,SampMean)
         SampCov = rbind(SampCov3,append(SampMean,1))
       }else if(extractMatrices(model)$mean == FALSE){
-        SampCov <- model@SampleStats@cov[][[1]]
+       # SampCov <- model@SampleStats@cov[][[1]]
         SampMean = NULL
       }
 
@@ -235,6 +259,7 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
       #stop("FIML is currently not supported at this time")
       calc_fit = "ind"
       SampCov <- model@SampleStats@cov[][[1]]
+      mediation_vals <- NA
 
       nobs = model@SampleStats@nobs[[1]][1]
      # if(is.null(data)==TRUE){
@@ -338,49 +363,27 @@ if(fac.type=="cfa"){
    }else if(class(Start) != "numeric"){
      if(Start=="lavaan"){
        # get starting values
-       lambda.start = lavaan::inspect(model,"start")$lambda
-       psi.start = lavaan::inspect(model,"start")$psi  # tricky to get ordering
-       theta.start = diag(lavaan::inspect(model,"start")$theta) # only diagonal elements of theta
-       nu.start = lavaan::inspect(model,"start")$nu
-       alpha.start = lavaan::inspect(model,"start")$alpha
-       # put into vector
-       #par.start = as.vector(c(lambda.start[lambda.start != 0],psi.start[!upper.tri(psi.start)],theta.start),mode="numeric")
-       par.start = as.vector(c(lambda.start,theta.start,psi.start[!upper.tri(psi.start)]),mode="numeric")
-       # assign which values in parTable have a number assigned !=0 in free column
-       free <- lavaan::parTable(model)$free
-       # pull only free parameters
-       start = par.start[free > 0]
-       st <- is.na(start)
-       start <- start[!st]
+       start <- mats$parameters
 
      } else if(Start == "default"){
        nstart <- max(max(A),max(S))
        start <- rep(0.5,nstart)
 
      }
-   }else if(Start=="prev"){
-     nstart <- max(max(A),max(S))
-     start.seq <- seq(1:nstart)
-     start <- rep(0.5,nstart)
-
-     for(i in 1:nstart){
-       if(sum(A == i) > 0) {
-         start[i] = A.est[A == i]
-       }
-       else if(sum(S== i)>0){
-         start[i] = S.est[S==i][1]
-       }
-     }
    }
+
+
+
 
 
   if(calc == "normal"){
     calc = function(start){
          mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
          #print(mult)
+
          #mult2 = RAMmult(par=start,A,S,F,A_fixed,A_est,S_fixed,S_est)
          #print(mult2)
-         pen_vec = c(mult$A_est22[A %in% pars_pen],mult$S_est22[S %in% pars_pen])
+         pen_vec = c(mult$A_est22[match(pars_pen,A,nomatch=0)],mult$S_est22[match(pars_pen,S,nomatch=0)])
          if(type=="diff_lasso"){
            pen_diff = pen_vec - diff_par
          }else{
@@ -389,14 +392,20 @@ if(fac.type=="cfa"){
          if(calc_fit=="cov"){
            #fit = fit_fun(ImpCov=mult$ImpCov,SampCov,Areg=mult$A_est22,lambda,alpha,type,pen_vec)
            fit = rcpp_fit_fun(ImpCov=mult$ImpCov,SampCov,type2,lambda,pen_vec,pen_diff)
+           #print(round(fit,3));print(pen_diff)
            fit
          }else if(calc_fit=="ind"){
            #stop("Not currently supported")
            #print(mult$ImpCov)
-           fit = fiml_calc(ImpCov=mult$ImpCov,mu.hat=model@SampleStats@missing.h1[[1]]$mu,
-                           h1=model@SampleStats@missing.h1[[1]]$h1,
-                           Areg=mult$A_est22,lambda,alpha,type,pen_vec,nvar,
-                           lav.miss=model@SampleStats@missing[[1]])
+
+           #fit = fiml_calc(ImpCov=mult$ImpCov,mu.hat=model@SampleStats@missing.h1[[1]]$mu,
+           #                h1=model@SampleStats@missing.h1[[1]]$h1,
+           #                Areg=mult$A_est22,lambda,alpha,type,pen_vec,nvar,
+           #                lav.miss=model@SampleStats@missing[[1]])
+           fit = fiml_calc2(ImpCov=mult$ImpCov,F,mats2=mult,
+                           type=type,lambda=lambda,
+                           model=model,sat.lik=sat.lik,
+                           pen_vec=pen_vec)
          }
 
     }
@@ -411,7 +420,7 @@ if(fac.type=="cfa"){
     calc = function(start){
       mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
       #mult = RAMmult(par=start,A,S,F,A_fixed,A_est,S_fixed,S_est)
-      pen_vec = c(mult$A_est22[A %in% pars_pen],mult$S_est22[S %in% pars_pen])
+      pen_vec = c(mult$A_est22[match(pars_pen,A,nomatch=0)],mult$S_est22[match(pars_pen,S,nomatch=0)])
       if(type=="diff_lasso"){
         pen_diff = pen_vec - diff_par
       }else{
@@ -456,11 +465,14 @@ if(fac.type=="cfa"){
       #mult = RAMmult(par=start,A,S,F,A_fixed,A_est,S_fixed,S_est)
 
       if(optMethod=="coord_desc"){
-        ret = grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
-                       Sreg=mult$S_est22,A,S,
-                       F,lambda,type,pars_pen,diff_par)
+        if(type2==1 | type2==3) type2=0
+
+        pen_vec = c(mult$A_est22[match(pars_pen,A,nomatch=0)],mult$S_est22[match(pars_pen,S,nomatch=0)])
+        ret = rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
+                            Sreg=mult$S_est22,A,S,
+                            F,lambda,type2=type2,pars_pen,diff_par=0)
       }else{
-        pen_vec = c(mult$A_est22[A %in% pars_pen],mult$S_est22[S %in% pars_pen])
+        pen_vec = c(mult$A_est22[match(pars_pen,A,nomatch=0)],mult$S_est22[match(pars_pen,S,nomatch=0)])
            ret = rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
                            Sreg=mult$S_est22,A,S,
                              F,lambda,type2=type2,pars_pen,diff_par=0)
@@ -587,8 +599,8 @@ if(optMethod=="nlminb"){
         #res$iterations <- out$iterations
       }else if(hessFun=="none"){
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
-       out <- nlminb(start,calc,grad,lower=LB,upper=UB,
-                     control=nlminb.control) #,x.tol=1.5e-6
+       suppressWarnings(out <- nlminb(start,calc,grad,lower=LB,upper=UB,
+                     control=nlminb.control)) #,x.tol=1.5e-6
         res$out <- out
         res$iteration = out$iterations
         #res$optim_fit <- out$objective
@@ -645,7 +657,7 @@ if(optMethod=="nlminb"){
       }else if(hessFun=="none"){
         warning("numDeriv does not seem to be accurate at this time")
         #LB = c(rep(-6,max(A)),rep(1e-6,max(diag(S))-max(A)),rep(-10,max(S)-max(diag(S))))
-        out <- nlminb(start,calc,lower=LB,upper=UB,gradient=grad,,control=nlminb.control)
+        out <- nlminb(start,calc,lower=LB,upper=UB,gradient=grad,control=nlminb.control)
         res$out <- out
         #res$optim_fit <- out$objective
         res$convergence = out$convergence
@@ -747,17 +759,19 @@ if(optMethod=="nlminb"){
   res$convergence = 0
   res$par.ret <- summary(out)$solution
 }else if(optMethod=="coord_desc"){
-  out = coord_desc(start=start,func=calc,grad=grad,hess=hess,
+  out = coord_desc(start=start,func=calc,type=type,grad=grad,
+                   hess=hess,hessFun=hessFun,
                    pars_pen=pars_pen,model=model,max.iter=max.iter,
-                   lambda=lambda,mats=mats,block=block,tol=tol)
+                   lambda=lambda,mats=mats,block=block,tol=tol,full=full,
+                   solver=solver,solver.maxit=solver.maxit,
+                   alpha.inc=alpha.inc,momentum=momentum,step=step,
+                   step.ratio=step.ratio,diff_par=diff_par)
   res$out <- out
   res$optim_fit <- out$value
   res$convergence = out$convergence
   par.ret <- out$pars
   res$iterations <- out$iterations
 }
-
-
 
 
 
@@ -782,18 +796,37 @@ if(optMethod=="nlminb"){
     pars.df <- data.frame(matrix(NA,1,max(max(A),max(S))))
     pars.df[1,] <- par.ret
 
-    if(any(pars.df[diag(S[diag(S) != 0])] < 0)){
-      warning("Some Variances are Negative!")
+#    if(any(pars.df[diag(S[diag(S) != 0])] < 0)){
+#      warning("Some Variances are Negative!")
+#      res$convergence <- 2
+ #   }
+
+
+
+
+
+    if(type=="ridge"){
+      hess = function(start){
+
+        mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
+        #mult = RAMmult(par=start,A,S,F,A_fixed,A_est,S_fixed,S_est)
+        ret = hess_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
+                       Sreg=mult$S_est22,A,S,F)
+        ret
+      }
+      hess.mat = hess(as.numeric(pars.df))
+      res$hess <- hess.mat
     }
 
 
     #res$ftt = rcpp_RAMmult(par=as.numeric(pars.df),A,S,S_fixed,A_fixed,A_est,S_est,F,I)
       # get Implied Covariance matrix
 
-    Imp_Cov1 <- rcpp_RAMmult(par=as.numeric(pars.df),A,S,S_fixed,A_fixed,A_est,S_est,F,I)$ImpCov
+    mult.out <- rcpp_RAMmult(par=as.numeric(pars.df),A,S,S_fixed,A_fixed,A_est,S_est,F,I)
+    Imp_Cov1 <- mult.out$ImpCov
     #Imp_Cov <- RAMmult(par=as.numeric(pars.df),A,S,F,A_fixed,A_est,S_fixed,S_est)$ImpCov
 
-
+    pen_vec = c(mult.out$A_est22[match(pars_pen,A,nomatch=0)],mult.out$S_est22[match(pars_pen,S,nomatch=0)])
 
     if(extractMatrices(model)$mean==TRUE & missing=="listwise"){
       Imp_Cov = Imp_Cov1[1:(nrow(Imp_Cov1)-1),1:(ncol(Imp_Cov1)-1)] - SampMean %*% t(SampMean)
@@ -896,15 +929,45 @@ if(optMethod=="nlminb"){
       res$df = df + sum(pars_l2 < 0.001)
       res$npar = npar - sum(pars_l2 < 0.001)
 
+    }else if(type=="diff_lasso"){
+      pars_sum = as.numeric(pars.df[pars_pen])
+      #print(pars_sum);print(duplicated(round(pars_sum,3)))
+      res$df = df + sum(duplicated(round(pars_sum,3)))
+      res$npar = npar - sum(duplicated(round(pars_sum,3)))
+
     }
+
+
+      if(optMethod=="nlminb"){
+        optFit <- out$objective
+      }else{
+        optFit <- res$optim_fit
+      }
+
+
     if(missing == "listwise"){
      # SampCov <- model@SampleStats@cov[][[1]]
     #  res$SampCov = SampCov
       #res$fit = 0.5*(log(det(Imp_Cov1)) + trace(SampCov %*% solve(Imp_Cov1)) -
        #              log(det(SampCov))  - nvar)
-      res$fit = rcpp_fit_fun(Imp_Cov1, SampCov,type2=0,lambda=0,pen_vec=0,pen_diff=0)
+     # pen_vec = c(mult$A_est22[A %in% pars_pen],mult$S_est22[S %in% pars_pen])
+      if(type=="diff_lasso"){
+        pen_diff = pen_vec - diff_par
+      }else{
+        pen_diff=0
+      }
+      res$fit = rcpp_fit_fun(Imp_Cov1, SampCov,type2=0,lambda=0,pen_vec=0,pen_diff=pen_diff)
     }else if(missing == "fiml" & type == "none"){
-      res$fit = res$out$objective
+      #print(res$optim_fit)
+      res$fit = (optFit/nobs)*.5
+     # res$fit = rcpp_fit_fun(ImpCov=Imp_Cov,SampCov,
+     #                        type2,lambda,pen_vec=0,pen_diff=0)
+      #SampCov <- model@implied$cov[[i]]
+      #res$fit = rcpp_fit_fun(Imp_Cov1, SampCov,type2=0,lambda=0,pen_vec=0,pen_diff=0)
+    }else if(missing=="fiml" & type != "none"){
+      res$fit = rcpp_fit_fun(ImpCov=Imp_Cov,SampCov,
+                             type2,lambda,pen_vec=0,pen_diff=0)
+
     }
 
     SampCov <- model@SampleStats@cov[][[1]]
@@ -988,9 +1051,18 @@ if(optMethod=="nlminb"){
     }
 
 
+    if(lambda > 0){
+      res$pars_pen <- pars_pen
+    }else{
+      res$pars_pen <- NULL
+    }
+
+
+
 
     if(res$convergence != 0){
-      warning("WARNING: Model did not converge! It is recommended to try multi_optim()")
+      warning("WARNING: Model did not converge! It is recommended to try multi_optim() or
+              change step.ratio=TRUE")
     }
 
     res$call <- match.call()

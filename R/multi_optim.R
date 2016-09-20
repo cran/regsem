@@ -41,6 +41,13 @@
 #'        which refers to the method specified in von Oertzen & Brick (2014).
 #'        The "norm" procedure uses the forward difference method for
 #'        calculating the hessian. This is slower and less accurate.
+#' @param tol Tolerance for coordinate descent
+#' @param solver Whether to use solver for coord_desc
+#' @param solver.maxit Max iterations for solver in coord_desc
+#' @param alpha.inc Whether alpha should increase for coord_desc
+#' @param step Step size
+#' @param momentum Logical for coord_desc
+#' @param step.ratio Ratio of step size between A and S. Logical
 #' @param verbose Whether to print iteration number.
 #' @param warm.start Whether start values are based on previous iteration.
 #'        This is not recommended.
@@ -77,23 +84,38 @@
 
 multi_optim <- function(model,max.try=10,lambda,
                          LB=-Inf,UB=Inf,type,optMethod="default",gradFun="ram",
-                         pars_pen=NULL,diff_par=NULL,hessFun="none",
+                         pars_pen=NULL,diff_par=NULL,hessFun="none",tol=1e-5,
+                        solver=FALSE,
+                        solver.maxit=5,
+                        alpha.inc=TRUE,
+                        step=.5,
+                        momentum=FALSE,
+                        step.ratio=FALSE,
                         verbose=FALSE,warm.start=FALSE,Start2=NULL,
                         nlminb.control=NULL){
 
-  warning("Note it is not currently recommended to use multi_optim")
 
-  if(gradFun=="norm"){
-    stop("Only recommended grad function is ram or none at this time")
+  if(optMethod=="default" & type=="lasso"){
+    optMethod<-"coord_desc"
   }
 
-  if(type=="ridge" & gradFun != "none"){
-    warning("At this time, only gradFun=none recommended with ridge penalties")
+  if(optMethod=="default" & type!="lasso"){
+    optMethod <- "nlminb"
   }
 
-  if(type=="lasso" & gradFun != "ram"){
-    warning("At this time, only gradFun=ram recommended with lasso penalties")
-  }
+ # warning("Note it is not currently recommended to use multi_optim")
+
+#  if(gradFun=="norm"){
+#    stop("Only recommended grad function is ram or none at this time")
+#  }
+
+#  if(type=="ridge" & gradFun != "none"){
+#    warning("At this time, only gradFun=none recommended with ridge penalties")
+#  }
+
+#  if(type=="lasso" & gradFun != "ram"){
+#    warning("At this time, only gradFun=ram recommended with lasso penalties")
+#  }
 
 
 #if(warm.start==TRUE){
@@ -120,8 +142,14 @@ multi_optim <- function(model,max.try=10,lambda,
 
   sss = seq(1,max.try)
 
-    mult_run <- function(model,n.try=1,lambda,LB=-Inf,
+    mult_run <- function(model,n.try=1,lambda,LB=-Inf,tol,
                          UB=Inf,type,optMethod,warm.start,
+                         solver,
+                         solver.maxit,
+                         alpha.inc,
+                         step,
+                         momentum,
+                         step.ratio,
                          gradFun,n.optim,pars_pen,nlminb.control,
                          diff_par,hessFun,Start2){
       mtt = matrix(NA,n.try,3)
@@ -137,14 +165,14 @@ multi_optim <- function(model,max.try=10,lambda,
 
 
 
-            start.optim = c(rep(0,val1) + rnorm(val1,0,0.1),abs(rep(0.5,val2) + rnorm(val2,0,0.1)))
-
+            #start.optim = c(rep(0,val1) + rnorm(val1,0,0.1),abs(rep(0.5,val2) + rnorm(val2,0,0.1)))
+            start.optim=mats$parameters
 
           }else{
             start.optim = Start2
           }
         }else if(warm.start==TRUE){
-          start.optim= Start2
+          start.optim= mats$parameters
         }
 
         #else if(warm.start==TRUE){
@@ -157,8 +185,16 @@ multi_optim <- function(model,max.try=10,lambda,
 
         fit1 <- suppressWarnings(try(regsem(model,lambda=lambda,type=type,optMethod=optMethod,
                                             Start=start.optim,gradFun=gradFun,hessFun=hessFun,
-                                            nlminb.control=nlminb.control,
+                                            nlminb.control=nlminb.control,tol=tol,
+                                            solver=solver,
+                                            solver.maxit=solver.maxit,
+                                            alpha.inc=alpha.inc,
+                                            step=step,
+                                            momentum=momentum,
+                                            step.ratio=step.ratio,
                                             LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par),silent=T))
+
+
 
         if(inherits(fit1, "try-error")) {
           mtt[n.optim,1] = NA
@@ -166,22 +202,23 @@ multi_optim <- function(model,max.try=10,lambda,
           start.vals = NULL
 
           if(warm.start == TRUE){
-            start.vals <- extractMatrices(model)$parameters +
-              rnorm(length(extractMatrices(model)$parameters),0,0.05)
+            start.vals <- mats$parameters +
+              rnorm(length(mats$parameters),0,0.05)
           }
         }else{
           start.vals = NULL
 
           if(warm.start==TRUE){
-            start.vals <- as.numeric(fit1$coefficients) + rnorm(length(extractMatrices(model)$parameters),0,0.0001)
+            start.vals <- as.numeric(fit1$coefficients) + rnorm(length(mats$parameters),0,0.0001)
           }
 
           if(optMethod=="nlminb"){
             mtt[n.optim,1] = fit1$out$objective
             mtt[n.optim,2] = fit1$out$convergence
           }else{
+            #print(fit1$out$value)
             mtt[n.optim,1] = fit1$out$value
-            mtt[n.optim,2] = fit1$out$convcode
+            mtt[n.optim,2] = fit1$out$convergence
           }
         }
     }
@@ -197,7 +234,13 @@ iter.optim = iter.optim + 1
 
 
     ret.mult = mult_run(model,n.try=1,lambda=lambda,LB,UB,type,warm.start=warm.start,
-                        nlminb.control=nlminb.control,
+                        nlminb.control=nlminb.control,tol=tol,
+                        solver=solver,
+                        solver.maxit=solver.maxit,
+                        alpha.inc=alpha.inc,
+                        step=step,
+                        momentum=momentum,
+                        step.ratio=step.ratio,
                     optMethod=optMethod,gradFun=gradFun,n.optim=iter.optim,Start2=Start2,
                     pars_pen=pars_pen,diff_par=diff_par,hessFun=hessFun)
 
@@ -249,7 +292,13 @@ iter.optim = iter.optim + 1
       }
       fit1 <- suppressWarnings(regsem(model,lambda=lambda,type=type,optMethod=optMethod,
                      Start=Start,gradFun=gradFun,hessFun=hessFun,
-                     nlminb.control=nlminb.control,
+                     nlminb.control=nlminb.control,tol=tol,
+                     solver=solver,
+                     solver.maxit=solver.maxit,
+                     alpha.inc=alpha.inc,
+                     step=step,
+                     momentum=momentum,
+                     step.ratio=step.ratio,
                      LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par))
 
         fit1$convergence <- 99

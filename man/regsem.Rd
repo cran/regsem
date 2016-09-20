@@ -6,11 +6,13 @@
 \usage{
 regsem(model, lambda = 0, alpha = 0, type = "none", data = NULL,
   optMethod = "default", gradFun = "ram", hessFun = "none",
-  parallel = "no", Start = "default", subOpt = "nlminb", longMod = F,
+  parallel = "no", Start = "lavaan", subOpt = "nlminb", longMod = F,
   optNL = "NLOPT_LN_NEWUOA_BOUND", fac.type = "cfa",
   matrices = "extractMatrices", pars_pen = NULL, diff_par = NULL,
-  LB = -Inf, UB = Inf, block = TRUE, calc = "normal", max.iter = 200,
-  tol = 1e-05, nlminb.control = list(), missing = "listwise")
+  LB = -Inf, UB = Inf, block = TRUE, full = FALSE, calc = "normal",
+  max.iter = 500, tol = 1e-05, solver = FALSE, solver.maxit = 5,
+  alpha.inc = TRUE, step = 0.5, momentum = FALSE, step.ratio = FALSE,
+  nlminb.control = list(), missing = "listwise")
 }
 \arguments{
 \item{model}{Lavaan output object. This is a model that was previously
@@ -89,12 +91,26 @@ converging.}
 
 \item{block}{Whether to use block coordinate descent}
 
+\item{full}{Whether to do full gradient descent or block}
+
 \item{calc}{Type of calc function to use with means or not. Not recommended
 for use.}
 
 \item{max.iter}{Number of iterations for coordinate descent}
 
 \item{tol}{Tolerance for coordinate descent}
+
+\item{solver}{Whether to use solver for coord_desc}
+
+\item{solver.maxit}{Max iterations for solver in coord_desc}
+
+\item{alpha.inc}{Whether alpha should increase for coord_desc}
+
+\item{step}{Step size}
+
+\item{momentum}{Logical for coord_desc}
+
+\item{step.ratio}{Ratio of step size between A and S. Logical}
 
 \item{nlminb.control}{list of control values to pass to nlminb}
 
@@ -151,7 +167,8 @@ f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
 # Recommended to specify meanstructure in lavaan
 outt = cfa(mod,HS,meanstructure=TRUE)
 
-fit1 <- regsem(outt,lambda=0.1,type="lasso",Start=extractMatrices(outt)$parameters)
+fit1 <- regsem(outt,lambda=0.05,type="lasso",pars_pen=c(1:2,6:8))
+#summary(fit1)
 }
 \keyword{calc}
 \keyword{optim}
