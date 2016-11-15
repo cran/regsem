@@ -22,6 +22,8 @@
 #'        converging.
 #' @param UB Upper bound vector
 #' @param type Penalty type. Options include "none", "lasso", "ridge",
+#'        "enet" for the elastic net,
+#'        "alasso" for the adaptive lasso, "scad, "mcp",
 #'        and "diff_lasso". diff_lasso penalizes the discrepency between
 #'        parameter estimates and some pre-specified values. The values
 #'        to take the deviation from are specified in diff_par.
@@ -82,11 +84,11 @@
 #'}
 
 
-multi_optim <- function(model,max.try=10,lambda,
-                         LB=-Inf,UB=Inf,type,optMethod="default",gradFun="ram",
+multi_optim <- function(model,max.try=10,lambda=0,
+                         LB=-Inf,UB=Inf,type="none",optMethod="default",gradFun="ram",
                          pars_pen=NULL,diff_par=NULL,hessFun="none",tol=1e-5,
                         solver=FALSE,
-                        solver.maxit=5,
+                        solver.maxit=50000,
                         alpha.inc=TRUE,
                         step=.5,
                         momentum=FALSE,
@@ -95,13 +97,13 @@ multi_optim <- function(model,max.try=10,lambda,
                         nlminb.control=NULL){
 
 
-  if(optMethod=="default" & type=="lasso"){
-    optMethod<-"coord_desc"
-  }
+#  if(optMethod=="default" & type=="lasso"){
+#    optMethod<-"coord_desc"
+#  }
 
-  if(optMethod=="default" & type!="lasso"){
-    optMethod <- "nlminb"
-  }
+#  if(optMethod=="default" & type!="lasso"){
+#    optMethod <- "nlminb"
+#  }
 
  # warning("Note it is not currently recommended to use multi_optim")
 
@@ -274,7 +276,7 @@ iter.optim = iter.optim + 1
         #fit1 <- suppressWarnings(regsem(model,lambda=lambda,type=type,optMethod=optMethod,
         #               Start=start.optim,gradFun=gradFun,hessFun=hessFun,max.iter=max.iter,
          #              LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par,tol=tol))
-        return(ret.mult$fit1)
+        ret.mult$fit1
         break
         }else{
           return
@@ -302,7 +304,7 @@ iter.optim = iter.optim + 1
                      LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par))
 
         fit1$convergence <- 99
-        return(fit1)
+        fit1
    # }
 
 

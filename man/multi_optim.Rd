@@ -4,12 +4,12 @@
 \alias{multi_optim}
 \title{Multiple starts for Regularized Structural Equation Modeling}
 \usage{
-multi_optim(model, max.try = 10, lambda, LB = -Inf, UB = Inf, type,
-  optMethod = "default", gradFun = "ram", pars_pen = NULL,
-  diff_par = NULL, hessFun = "none", tol = 1e-05, solver = FALSE,
-  solver.maxit = 5, alpha.inc = TRUE, step = 0.5, momentum = FALSE,
-  step.ratio = FALSE, verbose = FALSE, warm.start = FALSE,
-  Start2 = NULL, nlminb.control = NULL)
+multi_optim(model, max.try = 10, lambda = 0, LB = -Inf, UB = Inf,
+  type = "none", optMethod = "default", gradFun = "ram",
+  pars_pen = NULL, diff_par = NULL, hessFun = "none", tol = 1e-05,
+  solver = FALSE, solver.maxit = 50000, alpha.inc = TRUE, step = 0.5,
+  momentum = FALSE, step.ratio = FALSE, verbose = FALSE,
+  warm.start = FALSE, Start2 = NULL, nlminb.control = NULL)
 }
 \arguments{
 \item{model}{Lavaan output object. This is a model that was previously
@@ -36,6 +36,8 @@ converging.}
 \item{UB}{Upper bound vector}
 
 \item{type}{Penalty type. Options include "none", "lasso", "ridge",
+"enet" for the elastic net,
+"alasso" for the adaptive lasso, "scad, "mcp",
 and "diff_lasso". diff_lasso penalizes the discrepency between
 parameter estimates and some pre-specified values. The values
 to take the deviation from are specified in diff_par.}
