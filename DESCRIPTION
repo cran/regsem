@@ -1,7 +1,7 @@
 Package: regsem
 Type: Package
 Title: Performs Regularization on Structural Equation Models
-Version: 0.4.3
+Version: 0.4.5
 Author: Ross Jacobucci[aut,cre], Kevin J. Grimm [ctb]
 Maintainer: Ross Jacobucci <rcjacobuc@gmail.com>
 Description: Uses both ridge and lasso penalties (and extensions) to penalize
@@ -14,6 +14,6 @@ Suggests: snowfall, GA, rgenoud, Rsolnp, numDeriv, optimx, semPlot
 LinkingTo: Rcpp, RcppArmadillo
 RoxygenNote: 5.0.1
 NeedsCompilation: yes
-Packaged: 2016-11-15 17:03:24 UTC; RJacobucci
+Packaged: 2016-12-07 03:43:43 UTC; RJacobucci
 Repository: CRAN
-Date/Publication: 2016-11-15 19:37:05
+Date/Publication: 2016-12-07 08:43:53

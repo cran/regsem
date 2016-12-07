@@ -1071,5 +1071,5 @@ if(optMethod=="nlminb"){
 
     res$call <- match.call()
     class(res) <- "regsem"
-    res
+    return(res)
 }

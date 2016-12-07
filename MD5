@@ -1,9 +1,9 @@
-c3e36b8855dc41caa165e7931b514460 *DESCRIPTION
+69dbc5be4e7ebc8366f59acaa18e4598 *DESCRIPTION
 d2f0e468824e6dcaed7c9c2dc97ef6b2 *NAMESPACE
 f19d3d55891f8c014778c17d3fc67a94 *R/RAMmult.R
 3de5517f3585b0d8d027265da2601f93 *R/RcppExports.R
 4739486aadb19dd8883191ed193b8cf7 *R/coord_desc.R
-0b543f6f91fe7bb77ae47e0d2564fdde *R/cv_regsem.R
+a1dbfb052521bf1fbcfacd70c9560273 *R/cv_regsem.R
 f8e615c6cfebd90b0a8c102c1df51f06 *R/extractMatrices.R
 4d84d520690947989caadce040b745e7 *R/fiml_calc.R
 9e3cc356f0b440c54c1bf3e46ac1d79f *R/fiml_calc2.R
@@ -16,10 +16,10 @@ a28babce420a538d9f25c86a4ea57018 *R/grad_ram_wMean.R
 2c5668fb3421c841a41f3605f87ce951 *R/hess_ramParallel.R
 e1a9d44699e20d873c151b01dc27133f *R/hessian.R
 4df770d021af1bcefdf8fe4f7187ca8b *R/hessian_parallel.R
-09b2364ecaaadd82951f6124c3885dc7 *R/multi_optim.R
+6995b9c3110984e0643a769cc44599de *R/multi_optim.R
 4d3692b4b78b4cce9c82e8ef477662a3 *R/plot.R
 995f658d8f61773297f27fe272cef801 *R/ram_calc.R
-6e69171cdffab98ba5b86bc8e8d1fc9f *R/regsem.R
+aa94b052710a29f0c2764c21505c1276 *R/regsem.R
 357ec28fc5623ff0bc86ecdc3b7057f7 *R/ret_hess.R
 526f909552c2672cdb9ce13e0b7b9190 *R/soft.R
 09aa5e87418ad0c942d608ddf50c83db *R/summary.R
