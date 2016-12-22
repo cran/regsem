@@ -32,6 +32,7 @@
 #' @param LB lower bound vector.
 #' @param UB upper bound vector
 #' @param block Whether to use block coordinate descent
+#' @param full Whether to do full gradient descent or block
 #' @param calc Type of calc function to use with means or not. Not recommended
 #'        for use.
 #' @param nlminb.control list of control values to pass to nlminb
@@ -87,6 +88,7 @@ cv_regsem = function(model,
                     LB=-Inf,
                     UB=Inf,
                     block=TRUE,
+                    full=TRUE,
                     calc="normal",
                     max.iter=2000,
                     tol=1e-5,
@@ -110,7 +112,9 @@ cv_regsem = function(model,
 
 
 
-
+if(parallel == TRUE){
+  stop("parallel is not currently supported")
+}
 
 if(parallel==FALSE){
 par.matrix <- matrix(0,n.lambda,length(extractMatrices(model)$parameters))
@@ -151,6 +155,8 @@ if(mult.start==FALSE){
                    diff_par=diff_par,
                    LB=LB,
                    UB=UB,
+                   block=block,
+                   full=full,
                    calc=calc,
                    tol=tol,
                     solver=solver,
@@ -183,6 +189,8 @@ if(mult.start==FALSE){
                       tol=tol,
                       solver=solver,
                       solver.maxit=solver.maxit,
+                      full=full,
+                      block=block,
                       alpha.inc=alpha.inc,
                       step=step,Start2=Start2,
                       momentum=momentum,
@@ -221,7 +229,17 @@ if(mult.start==FALSE){
     }
   }
   fits[count,1] <- SHRINK
-  fits[count,2] <- out$out$convergence
+
+#  if(class(out$convergence)=="numeric"){
+  #print(class(out$convergence));print(1)
+  #print(out$convergence);print(class(out$convergence))
+    fits[count,2] <- out$convergence
+
+ # }else{
+ #   fits[count,2] <- 99
+    #out$convergence <- 99
+ # }
+
 
   if(is.null(out$coefficients)==TRUE){
     break
@@ -263,6 +281,8 @@ if(mult.start==FALSE){
                     calc=calc,
                     nlminb.control=nlminb.control,
                     tol=tol,
+                    full=full,
+                    block=block,
                     solver=solver,
                     solver.maxit=solver.maxit,
                     alpha.inc=alpha.inc,
@@ -277,6 +297,8 @@ if(mult.start==FALSE){
                          LB=LB,UB=UB,type=type,optMethod=optMethod,
                          gradFun=gradFun,hessFun=hessFun,nlminb.control=nlminb.control,
                          tol=tol,
+                         full=full,
+                         block=block,
                          solver=solver,
                          solver.maxit=solver.maxit,
                          alpha.inc=alpha.inc,
@@ -315,7 +337,7 @@ if(mult.start==FALSE){
       }
     }
     fitss <- matrix(fitss,1,length(fit.ret))
-    data.frame(SHRINK,conv=out$out$convergence,fitss,out$coefficients)
+    data.frame(SHRINK,conv=out$convergence,fitss,out$coefficients)
   }
 
 
@@ -330,6 +352,8 @@ if(mult.start==FALSE){
                      "pars_pen",
                      "diff_par",
                      "LB",
+                     "block",
+                     "full",
                      "UB",
                      "calc",
                      "nlminb.control",

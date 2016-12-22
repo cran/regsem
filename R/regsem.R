@@ -120,7 +120,7 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
                  LB=-Inf,
                  UB=Inf,
                  block=TRUE,
-                 full=FALSE,
+                 full=TRUE,
                  calc="normal",
                  max.iter=500,
                  tol=1e-5,
@@ -149,9 +149,9 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
     stop("only optmethod==nlminb or coord_desc is currently supported well")
   }
 
-  if(optMethod=="nlminb"& type !="ridge"){
-    stop("Only optMethod=coord_desc is recommended for use")
-  }
+#  if(optMethod=="nlminb"& type !="ridge" | type != "none"){
+#    stop("Only optMethod=coord_desc is recommended for use")
+#  }
 
   if(length(nlminb.control)==0){
     nlminb.control <- list(abs.tol=1e-6,
@@ -558,6 +558,7 @@ if(optMethod=="nlminb"){
         out <- nlminb(start,calc,grad,lower=LB,upper=UB,control=list(eval.max=max.iter,
                                                                      iter.max=max.iter))
         res$out <- out
+
         res$convergence = out$convergence
         #res$optim_fit <- out$objective
         par.ret <- out$par
@@ -763,7 +764,10 @@ if(optMethod=="nlminb"){
                    step.ratio=step.ratio,diff_par=diff_par,pen_vec=pen_vec)
   res$out <- out
   res$optim_fit <- out$value
-  res$convergence = out$convergence
+  #print(out$convergence)
+
+    res$convergence <- out$convergence
+
   par.ret <- out$pars
   res$iterations <- out$iterations
 }
