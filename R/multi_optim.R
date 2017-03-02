@@ -21,14 +21,18 @@
 #'        when using regularization. It greatly increases the chances of
 #'        converging.
 #' @param UB Upper bound vector
+#' @param par.lim Vector of minimum and maximum parameter estimates. Used to
+#'        stop optimization and move to new starting values if violated.
 #' @param block Whether to use block coordinate descent
 #' @param full Whether to do full gradient descent or block
 #' @param type Penalty type. Options include "none", "lasso", "ridge",
 #'        "enet" for the elastic net,
-#'        "alasso" for the adaptive lasso, "scad, "mcp",
+#'        "alasso" for the adaptive lasso
 #'        and "diff_lasso". diff_lasso penalizes the discrepency between
 #'        parameter estimates and some pre-specified values. The values
-#'        to take the deviation from are specified in diff_par.
+#'        to take the deviation from are specified in diff_par. Two methods for
+#'        sparser results than lasso are the smooth clipped absolute deviation,
+#'        "scad", and the minimum concave penalty, "mcp".
 #' @param optMethod Solver to use. Recommended options include "nlminb" and
 #'        "optimx". Note: for "optimx", the default method is to use nlminb.
 #'        This can be changed in subOpt.
@@ -50,13 +54,14 @@
 #' @param solver.maxit Max iterations for solver in coord_desc
 #' @param alpha.inc Whether alpha should increase for coord_desc
 #' @param step Step size
-#' @param momentum Logical for coord_desc
+#' @param momentum Momentum for step sizes
 #' @param step.ratio Ratio of step size between A and S. Logical
 #' @param verbose Whether to print iteration number.
 #' @param warm.start Whether start values are based on previous iteration.
 #'        This is not recommended.
 #' @param Start2 Provided starting values. Not required
 #' @param nlminb.control list of control values to pass to nlminb
+#' @param max.iter Number of iterations for coordinate descent
 #' @keywords multiple optim
 #' @export
 #' @examples
@@ -89,6 +94,7 @@
 multi_optim <- function(model,max.try=10,lambda=0,
                          LB=-Inf,
                         UB=Inf,
+                        par.lim=c(-Inf,Inf),
                         block=TRUE,
                         full=TRUE,
                         type="none",
@@ -100,12 +106,13 @@ multi_optim <- function(model,max.try=10,lambda=0,
                         tol=1e-5,
                         solver=FALSE,
                         solver.maxit=50000,
-                        alpha.inc=TRUE,
-                        step=.5,
+                        alpha.inc=FALSE,
+                        step=.1,
                         momentum=FALSE,
                         step.ratio=FALSE,
                         verbose=FALSE,warm.start=FALSE,Start2=NULL,
-                        nlminb.control=NULL){
+                        nlminb.control=NULL,
+                        max.iter=500){
 
 
 #  if(optMethod=="default" & type=="lasso"){
@@ -157,6 +164,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
 
     mult_run <- function(model,n.try=1,lambda,LB=-Inf,tol,
                          UB=Inf,
+                         par.lim,
                          block,
                          full,
                          type,optMethod,warm.start,
@@ -165,6 +173,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                          alpha.inc,
                          step,
                          momentum,
+                         max.iter,
                          step.ratio,
                          gradFun,n.optim,pars_pen,nlminb.control,
                          diff_par,hessFun,Start2){
@@ -204,9 +213,11 @@ multi_optim <- function(model,max.try=10,lambda=0,
                                             nlminb.control=nlminb.control,tol=tol,
                                             solver=solver,
                                             block=block,
+                                            par.lim=par.lim,
                                             full=full,
                                             solver.maxit=solver.maxit,
                                             alpha.inc=alpha.inc,
+                                            max.iter=max.iter,
                                             step=step,
                                             momentum=momentum,
                                             step.ratio=step.ratio,
@@ -255,8 +266,10 @@ iter.optim = iter.optim + 1
                         nlminb.control=nlminb.control,tol=tol,
                         solver=solver,
                         block=block,
+                        par.lim=par.lim,
                         full=full,
                         solver.maxit=solver.maxit,
+                        max.iter=max.iter,
                         alpha.inc=alpha.inc,
                         step=step,
                         momentum=momentum,
@@ -316,6 +329,8 @@ iter.optim = iter.optim + 1
                      solver=solver,
                      block=block,
                      full=full,
+                     par.lim=par.lim,
+                     max.iter=max.iter,
                      solver.maxit=solver.maxit,
                      alpha.inc=alpha.inc,
                      step=step,

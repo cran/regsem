@@ -17,12 +17,15 @@
 #'        convergence issues. If using values > 0.1, it is recommended to use
 #'        mutli_optim() instead. See \code{\link{multi_optim}} for more detail.
 #' @param alpha Mixture for elastic net. Not currently working applied.
+#' @param gamma Additional penalty for MCP and SCAD
 #' @param type Penalty type. Options include "none", "lasso", "ridge",
 #'        "enet" for the elastic net,
-#'        "alasso" for the adaptive lasso, "scad, "mcp",
+#'        "alasso" for the adaptive lasso
 #'        and "diff_lasso". diff_lasso penalizes the discrepency between
 #'        parameter estimates and some pre-specified values. The values
-#'        to take the deviation from are specified in diff_par.
+#'        to take the deviation from are specified in diff_par. Two methods for
+#'        sparser results than lasso are the smooth clipped absolute deviation,
+#'        "scad", and the minimum concave penalty, "mcp".
 #' @param data Optional dataframe. Only required for missing="fiml" which
 #'        is not currently working.
 #' @param optMethod Solver to use. Recommended options include "nlminb" and
@@ -54,6 +57,8 @@
 #'        when using regularization. It greatly increases the chances of
 #'        converging.
 #' @param UB Upper bound vector
+#' @param par.lim Vector of minimum and maximum parameter estimates. Used to
+#'        stop optimization and move to new starting values if violated.
 #' @param block Whether to use block coordinate descent
 #' @param full Whether to do full gradient descent or block
 #' @param calc Type of calc function to use with means or not. Not recommended
@@ -65,7 +70,7 @@
 #' @param solver.maxit Max iterations for solver in coord_desc
 #' @param alpha.inc Whether alpha should increase for coord_desc
 #' @param step Step size
-#' @param momentum Logical for coord_desc
+#' @param momentum Momentum for step sizes
 #' @param step.ratio Ratio of step size between A and S. Logical
 #' @param missing How to handle missing data. Current options are "listwise"
 #'        and "fiml". "fiml" is not currently working well.
@@ -90,7 +95,7 @@
 #' @return baseline.chisq Baseline chi-square.
 #' @return baseline.df Baseline degrees of freedom.
 #' @keywords optim calc
-#' @useDynLib regsem
+#' @useDynLib regsem, .registration=TRUE
 #' @import Rcpp
 #' @import lavaan
 #' @importFrom stats cov na.omit nlminb pchisq rnorm runif sd uniroot var weighted.mean
@@ -112,13 +117,14 @@
 
 
 
-regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="default",
+regsem = function(model,lambda=0,alpha=0,gamma=3.7, type="none",data=NULL,optMethod="default",
                  gradFun="ram",hessFun="none",parallel="no",Start="lavaan",
                  subOpt="nlminb",longMod=F,
                  pars_pen=NULL,
                  diff_par=NULL,
                  LB=-Inf,
                  UB=Inf,
+                 par.lim=c(-Inf,Inf),
                  block=TRUE,
                  full=TRUE,
                  calc="normal",
@@ -126,8 +132,8 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
                  tol=1e-5,
                  solver=FALSE,
                  solver.maxit=5,
-                 alpha.inc=TRUE,
-                 step=.5,
+                 alpha.inc=FALSE,
+                 step=.1,
                  momentum=FALSE,
                  step.ratio=FALSE,
                  nlminb.control=list(),
@@ -135,6 +141,10 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
 
   e_alpha=alpha
 
+
+  if(type == "scad" | type == "mcp"){
+    warning("this type is currently not working well")
+  }
   if(optMethod=="default" & type=="lasso" | type=="diff_lasso" |
      type=="enet" | type=="alasso" | type=="scad" | type=="mcp"){
       optMethod<-"coord_desc"
@@ -207,11 +217,13 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
   }
 
 
-  if(model@Fit@converged == FALSE){
-    sat.lik = NA
-  }else{
-    sat.lik <- as.numeric(fitmeasures(model)["unrestricted.logl"])
-  }
+ # lav.fits <- fitmeasures(model)
+
+#  if(model@Fit@converged == FALSE){
+#    sat.lik = NA
+#  }else{
+#    sat.lik <- as.numeric(lav.fits["unrestricted.logl"])
+#  }
 
 
 
@@ -227,8 +239,8 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
 
 
       # get mediation parameters
-      if(any(is.na(extractMatrices(model)$mediation))==FALSE){
-        mediation_vals <- extractMatrices(model)$mediation
+      if(any(is.na(mats$mediation))==FALSE){
+        mediation_vals <- mats$mediation
       }else{
         mediation_vals <- NA
       }
@@ -240,8 +252,8 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
       }
 
 
-      if(extractMatrices(model)$mean == TRUE){
-        mm = extractMatrices(model)$A[,"1"]
+      if(mats$mean == TRUE){
+        mm = mats$A[,"1"]
 
         SampMean <- model@SampleStats@mean[][[1]]
         ss = match(names(mm[mm > 0]),model@Data@ov$name)
@@ -252,7 +264,7 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
         # try changing size of SampCov
         SampCov3 = cbind(SampCov2,SampMean)
         SampCov = rbind(SampCov3,append(SampMean,1))
-      }else if(extractMatrices(model)$mean == FALSE){
+      }else if(mats$mean == FALSE){
        # SampCov <- model@SampleStats@cov[][[1]]
         SampMean = NULL
       }
@@ -309,14 +321,14 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
 
 
 
-  list <- extractMatrices(model)  ############## redundant !!! need to clean #
-  A <- list$A
-  A_est <- list$A_est
-  A_fixed <- list$A_fixed
-  S <- list$S
-  S_est <- list$S_est
-  S_fixed <- list$S_fixed
-  F <- list$F
+
+  A <- mats$A
+  A_est <- mats$A_est
+  A_fixed <- mats$A_fixed
+  S <- mats$S
+  S_est <- mats$S_est
+  S_fixed <- mats$S_fixed
+  F <- mats$F
   I <- diag(nrow(A))
 
 
@@ -369,27 +381,29 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
          #### for alasso - weight the parameters ####
          #### overwrite pen_vec ########
          if(type=="alasso"){
-           pen_vec_ml = c(list$A_est[match(pars_pen,A,nomatch=0)],list$S_est[match(pars_pen,S,nomatch=0)])
+           pen_vec_ml = c(mats$A_est[match(pars_pen,A,nomatch=0)],mats$S_est[match(pars_pen,S,nomatch=0)])
            pen_vec = abs(pen_vec)*(1/(abs(pen_vec_ml)))
          }
 
          if(calc_fit=="cov"){
            #fit = fit_fun(ImpCov=mult$ImpCov,SampCov,Areg=mult$A_est22,lambda,alpha,type,pen_vec)
-           fit = rcpp_fit_fun(ImpCov=mult$ImpCov,SampCov,type2,lambda,pen_vec,pen_diff)
-           #print(round(fit,3));print(pen_diff)
+           fit = rcpp_fit_fun(ImpCov=mult$ImpCov,SampCov,type2,lambda,gamma,pen_vec,pen_diff,e_alpha)
+           #print(fit)
+          # print(type2)
+           #print(round(fit,3))#;print(pen_diff)
            fit
          }else if(calc_fit=="ind"){
-           #stop("Not currently supported")
+           stop("Not currently supported")
            #print(mult$ImpCov)
 
            #fit = fiml_calc(ImpCov=mult$ImpCov,mu.hat=model@SampleStats@missing.h1[[1]]$mu,
            #                h1=model@SampleStats@missing.h1[[1]]$h1,
            #                Areg=mult$A_est22,lambda,alpha,type,pen_vec,nvar,
            #                lav.miss=model@SampleStats@missing[[1]])
-           fit = fiml_calc2(ImpCov=mult$ImpCov,F,mats2=mult,
-                           type=type,lambda=lambda,
-                           model=model,sat.lik=sat.lik,
-                           pen_vec=pen_vec)
+          # fit = fiml_calc2(ImpCov=mult$ImpCov,F,mats2=mult,
+          #                 type=type,lambda=lambda,
+          #                 model=model,sat.lik=sat.lik,
+          #                 pen_vec=pen_vec)
          }
 
     }
@@ -481,6 +495,13 @@ regsem = function(model,lambda=0,alpha=0,type="none",data=NULL,optMethod="defaul
     #mult = RAMmult(par=start,A,S,F,A.fixed,A.est,S.fixed,S.est)
     ret = numDeriv::grad(calc,x=start)
     ret
+  }
+} else if(gradFun=="auto"){
+  grad = function(start){
+stop("gradFun = auto is not supported at this time")
+
+  #  ret = numderiv(calc,x=start)
+  #  ret
   }
 }
 
@@ -749,7 +770,7 @@ if(optMethod=="nlminb"){
   if(type=="alasso"){
     mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
     pen_vec = c(mult$A_est22[match(pars_pen,A,nomatch=0)],mult$S_est22[match(pars_pen,S,nomatch=0)])
-    pen_vec_ml = c(list$A_est[match(pars_pen,A,nomatch=0)],list$S_est[match(pars_pen,S,nomatch=0)])
+    pen_vec_ml = c(mats$A_est[match(pars_pen,A,nomatch=0)],mats$S_est[match(pars_pen,S,nomatch=0)])
     pen_vec = abs(pen_vec)*(1/(abs(pen_vec_ml)))
   }
 
@@ -760,7 +781,9 @@ if(optMethod=="nlminb"){
                    pars_pen=pars_pen,model=model,max.iter=max.iter,
                    lambda=lambda,mats=mats,block=block,tol=tol,full=full,
                    solver=solver,solver.maxit=solver.maxit,
-                   alpha.inc=alpha.inc,momentum=momentum,step=step,
+                   alpha.inc=alpha.inc,step=step,momentum=momentum,
+                   e_alpha=e_alpha,gamma=gamma,
+                   par.lim=par.lim,
                    step.ratio=step.ratio,diff_par=diff_par,pen_vec=pen_vec)
   res$out <- out
   res$optim_fit <- out$value
@@ -827,7 +850,7 @@ if(optMethod=="nlminb"){
 
     pen_vec = c(mult.out$A_est22[match(pars_pen,A,nomatch=0)],mult.out$S_est22[match(pars_pen,S,nomatch=0)])
 
-    if(extractMatrices(model)$mean==TRUE & missing=="listwise"){
+    if(mats$mean==TRUE & missing=="listwise"){
       Imp_Cov = Imp_Cov1[1:(nrow(Imp_Cov1)-1),1:(ncol(Imp_Cov1)-1)] - SampMean %*% t(SampMean)
     }else{
       Imp_Cov = Imp_Cov1
@@ -841,11 +864,11 @@ if(optMethod=="nlminb"){
      # c <- N*p/2 * log(2 * pi)
       #res$logl_sat <- -c -(N/2) * log(det(SampCov00)) - (N/2)*p
 
-    if(model@Fit@converged == FALSE){
-      res$logl_sat= NA
-    }else{
-      res$logl_sat <- as.numeric(fitmeasures(model)["unrestricted.logl"])
-    }
+#    if(model@Fit@converged == FALSE){
+#      res$logl_sat= NA
+#    }else{
+ #     res$logl_sat <- as.numeric(lav.fits["unrestricted.logl"])
+ #   }
 
 
     #res$grad <- grad(as.numeric(pars.df))
@@ -925,7 +948,7 @@ if(optMethod=="nlminb"){
     if(type=="none" | lambda==0){
       res$df = df
       res$npar = npar
-    }else if(type=="lasso" | type=="alasso"){
+    }else if(type=="lasso" | type=="alasso" | type=="enet" | type=="scad" | type=="mcp"){
       #A_estim = A != 0
       #pars = A_est[A_estim]
       pars_sum = pars.df[pars_pen]
@@ -934,9 +957,9 @@ if(optMethod=="nlminb"){
       res$npar = npar - sum(pars_l2 < 0.001)
 
     }else if(type=="ridge"){
-      ratio1 <- sqrt(pars.df[pars_pen]**2)/sqrt(mats$parameters[pars_pen]**2)
-      res$df = df + length(ratio1) - sum(ratio1)
-      res$npar = npar - sum(ratio1)
+      #ratio1 <- sqrt(pars.df[pars_pen]**2)/sqrt(mats$parameters[pars_pen]**2)
+      res$df = df #+ length(ratio1) - sum(ratio1)
+      res$npar = npar #- sum(ratio1)
     }else if(type=="diff_lasso"){
       pars_sum = as.numeric(pars.df[pars_pen])
       #print(pars_sum);print(duplicated(round(pars_sum,3)))
@@ -964,7 +987,7 @@ if(optMethod=="nlminb"){
       }else{
         pen_diff=0
       }
-      res$fit = rcpp_fit_fun(Imp_Cov1, SampCov,type2=0,lambda=0,pen_vec=0,pen_diff=pen_diff)
+      res$fit = rcpp_fit_fun(Imp_Cov1, SampCov,type2=0,lambda=0,pen_vec=0,pen_diff=pen_diff,e_alpha=0,gamma=0)
     }else if(missing == "fiml" & type == "none"){
       #print(res$optim_fit)
       res$fit = (optFit/nobs)*.5
@@ -974,7 +997,7 @@ if(optMethod=="nlminb"){
       #res$fit = rcpp_fit_fun(Imp_Cov1, SampCov,type2=0,lambda=0,pen_vec=0,pen_diff=0)
     }else if(missing=="fiml" & type != "none"){
       res$fit = rcpp_fit_fun(ImpCov=Imp_Cov,SampCov,
-                             type2,lambda,pen_vec=0,pen_diff=0)
+                             type2,lambda,pen_vec=0,pen_diff=0,e_alpha=0,gamma=0)
 
     }
 
@@ -988,13 +1011,13 @@ if(optMethod=="nlminb"){
     res$N = nobs
     res$nfac = nfac
 
-    if(model@Fit@converged == FALSE){
-      res$baseline.chisq = NA
-      res$baseline.df = NA
-    }else{
-      res$baseline.chisq = fitMeasures(model)["baseline.chisq"]
-      res$baseline.df = fitMeasures(model)["baseline.df"]
-    }
+#    if(model@Fit@converged == FALSE){
+#      res$baseline.chisq = NA
+#      res$baseline.df = NA
+#    }else{
+#      res$baseline.chisq = lav.fits["baseline.chisq"]
+#      res$baseline.df = lav.fits["baseline.df"]
+#    }
 
     #res$grad <- grad(res$par.ret)
 
@@ -1067,6 +1090,7 @@ if(optMethod=="nlminb"){
 
     res$mean <- mats$mean
 
+    res$lav.model <- model
 
     if(res$convergence != 0){
       warning("WARNING: Model did not converge! It is recommended to try multi_optim() or

@@ -4,14 +4,14 @@
 \alias{regsem}
 \title{Regularized Structural Equation Modeling}
 \usage{
-regsem(model, lambda = 0, alpha = 0, type = "none", data = NULL,
-  optMethod = "default", gradFun = "ram", hessFun = "none",
+regsem(model, lambda = 0, alpha = 0, gamma = 3.7, type = "none",
+  data = NULL, optMethod = "default", gradFun = "ram", hessFun = "none",
   parallel = "no", Start = "lavaan", subOpt = "nlminb", longMod = F,
-  pars_pen = NULL, diff_par = NULL, LB = -Inf, UB = Inf, block = TRUE,
-  full = TRUE, calc = "normal", max.iter = 500, tol = 1e-05,
-  solver = FALSE, solver.maxit = 5, alpha.inc = TRUE, step = 0.5,
-  momentum = FALSE, step.ratio = FALSE, nlminb.control = list(),
-  missing = "listwise")
+  pars_pen = NULL, diff_par = NULL, LB = -Inf, UB = Inf,
+  par.lim = c(-Inf, Inf), block = TRUE, full = TRUE, calc = "normal",
+  max.iter = 500, tol = 1e-05, solver = FALSE, solver.maxit = 5,
+  alpha.inc = FALSE, step = 0.1, momentum = FALSE, step.ratio = FALSE,
+  nlminb.control = list(), missing = "listwise")
 }
 \arguments{
 \item{model}{Lavaan output object. This is a model that was previously
@@ -32,12 +32,16 @@ mutli_optim() instead. See \code{\link{multi_optim}} for more detail.}
 
 \item{alpha}{Mixture for elastic net. Not currently working applied.}
 
+\item{gamma}{Additional penalty for MCP and SCAD}
+
 \item{type}{Penalty type. Options include "none", "lasso", "ridge",
 "enet" for the elastic net,
-"alasso" for the adaptive lasso, "scad, "mcp",
+"alasso" for the adaptive lasso
 and "diff_lasso". diff_lasso penalizes the discrepency between
 parameter estimates and some pre-specified values. The values
-to take the deviation from are specified in diff_par.}
+to take the deviation from are specified in diff_par. Two methods for
+sparser results than lasso are the smooth clipped absolute deviation,
+"scad", and the minimum concave penalty, "mcp".}
 
 \item{data}{Optional dataframe. Only required for missing="fiml" which
 is not currently working.}
@@ -82,6 +86,9 @@ converging.}
 
 \item{UB}{Upper bound vector}
 
+\item{par.lim}{Vector of minimum and maximum parameter estimates. Used to
+stop optimization and move to new starting values if violated.}
+
 \item{block}{Whether to use block coordinate descent}
 
 \item{full}{Whether to do full gradient descent or block}
@@ -101,7 +108,7 @@ for use.}
 
 \item{step}{Step size}
 
-\item{momentum}{Logical for coord_desc}
+\item{momentum}{Momentum for step sizes}
 
 \item{step.ratio}{Ratio of step size between A and S. Logical}
 
@@ -165,4 +172,3 @@ fit1 <- regsem(outt,lambda=0.05,type="lasso",pars_pen=c(1:2,6:8))
 }
 \keyword{calc}
 \keyword{optim}
-

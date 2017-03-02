@@ -4,21 +4,23 @@
 \alias{cv_regsem}
 \title{The main function that ties together and runs the models.}
 \usage{
-cv_regsem(model, n.lambda = 100, mult.start = TRUE, multi.iter = 100,
-  jump = 0.002, lambda.start = 0, type = "none", fit.ret = c("rmsea",
-  "BIC"), fit.ret2 = "train", data = NULL, optMethod = "default",
-  gradFun = "ram", hessFun = "none", test.cov = NULL, parallel = FALSE,
-  ncore = 2, Start = "lavaan", subOpt = "nlminb", pars_pen = NULL,
-  diff_par = NULL, LB = -Inf, UB = Inf, block = TRUE, full = TRUE,
-  calc = "normal", max.iter = 2000, tol = 1e-05, solver = FALSE,
-  solver.maxit = 5, alpha.inc = TRUE, step = 0.5, momentum = FALSE,
-  step.ratio = FALSE, nlminb.control = list(), warm.start = TRUE,
-  missing = "listwise", ...)
+cv_regsem(model, n.lambda = 100, pars_pen = NULL, mult.start = TRUE,
+  multi.iter = 100, jump = 0.002, lambda.start = 0, type = "none",
+  fit.ret = c("rmsea", "BIC"), fit.ret2 = "train", data = NULL,
+  optMethod = "default", gradFun = "ram", hessFun = "none",
+  test.cov = NULL, parallel = FALSE, ncore = 2, Start = "lavaan",
+  subOpt = "nlminb", diff_par = NULL, LB = -Inf, UB = Inf,
+  par.lim = c(-Inf, Inf), block = TRUE, full = TRUE, calc = "normal",
+  max.iter = 2000, tol = 1e-05, solver = FALSE, solver.maxit = 5,
+  alpha.inc = FALSE, step = 0.1, momentum = FALSE, step.ratio = FALSE,
+  nlminb.control = list(), warm.start = TRUE, missing = "listwise", ...)
 }
 \arguments{
 \item{model}{lavaan output object.}
 
 \item{n.lambda}{number of penalization values to test.}
+
+\item{pars_pen}{parameter indicators to penalize.}
 
 \item{mult.start}{Logical. Whether to use multi_optim() (TRUE) or
 regsem() (FALSE).}
@@ -31,10 +33,12 @@ regsem() (FALSE).}
 
 \item{type}{Penalty type. Options include "none", "lasso", "ridge",
 "enet" for the elastic net,
-"alasso" for the adaptive lasso, "scad, "mcp",
+"alasso" for the adaptive lasso
 and "diff_lasso". diff_lasso penalizes the discrepency between
 parameter estimates and some pre-specified values. The values
-to take the deviation from are specified in diff_par.}
+to take the deviation from are specified in diff_par. Two methods for
+sparser results than lasso are the smooth clipped absolute deviation,
+"scad", and the minimum concave penalty, "mcp".}
 
 \item{fit.ret}{Fit indices to return.}
 
@@ -60,13 +64,14 @@ values of lambda.}
 
 \item{subOpt}{type of optimization to use in the optimx package.}
 
-\item{pars_pen}{parameter indicators to penalize.}
-
 \item{diff_par}{parameter values to deviate from.}
 
 \item{LB}{lower bound vector.}
 
 \item{UB}{upper bound vector}
+
+\item{par.lim}{Vector of minimum and maximum parameter estimates. Used to
+stop optimization and move to new starting values if violated.}
 
 \item{block}{Whether to use block coordinate descent}
 
@@ -87,7 +92,7 @@ for use.}
 
 \item{step}{Step size}
 
-\item{momentum}{Logical for coord_desc}
+\item{momentum}{Momentum for step sizes}
 
 \item{step.ratio}{Ratio of step size between A and S. Logical}
 
@@ -118,4 +123,3 @@ cv.out = cv_regsem(outt,type="ridge",gradFun="none",n.lambda=100)
 }
 \keyword{calc}
 \keyword{optim}
-

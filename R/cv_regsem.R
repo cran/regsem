@@ -3,6 +3,7 @@
 #' The main function that ties together and runs the models.
 #' @param model lavaan output object.
 #' @param n.lambda number of penalization values to test.
+#' @param pars_pen parameter indicators to penalize.
 #' @param mult.start Logical. Whether to use multi_optim() (TRUE) or
 #'         regsem() (FALSE).
 #' @param multi.iter maximum number of random starts for multi_optim
@@ -10,10 +11,12 @@
 #' @param lambda.start What value to start the penalty at
 #' @param type Penalty type. Options include "none", "lasso", "ridge",
 #'        "enet" for the elastic net,
-#'        "alasso" for the adaptive lasso, "scad, "mcp",
+#'        "alasso" for the adaptive lasso
 #'        and "diff_lasso". diff_lasso penalizes the discrepency between
 #'        parameter estimates and some pre-specified values. The values
-#'        to take the deviation from are specified in diff_par.
+#'        to take the deviation from are specified in diff_par. Two methods for
+#'        sparser results than lasso are the smooth clipped absolute deviation,
+#'        "scad", and the minimum concave penalty, "mcp".
 #' @param fit.ret Fit indices to return.
 #' @param fit.ret2 Return fits using only dataset "train" or bootstrap "boot"? Have to
 #'        do 2 sample CV manually.
@@ -27,10 +30,11 @@
 #' @param ncore Number of cores to use when parallel=TRUE
 #' @param Start type of starting values to use.
 #' @param subOpt type of optimization to use in the optimx package.
-#' @param pars_pen parameter indicators to penalize.
 #' @param diff_par parameter values to deviate from.
 #' @param LB lower bound vector.
 #' @param UB upper bound vector
+#' @param par.lim Vector of minimum and maximum parameter estimates. Used to
+#'        stop optimization and move to new starting values if violated.
 #' @param block Whether to use block coordinate descent
 #' @param full Whether to do full gradient descent or block
 #' @param calc Type of calc function to use with means or not. Not recommended
@@ -42,7 +46,7 @@
 #' @param solver.maxit Max iterations for solver in coord_desc
 #' @param alpha.inc Whether alpha should increase for coord_desc
 #' @param step Step size
-#' @param momentum Logical for coord_desc
+#' @param momentum Momentum for step sizes
 #' @param step.ratio Ratio of step size between A and S. Logical
 #' @param warm.start Whether start values are based on previous iteration.
 #'        This is not recommended.
@@ -67,6 +71,7 @@
 
 cv_regsem = function(model,
                      n.lambda=100,
+                     pars_pen=NULL,
                      mult.start=TRUE,
                      multi.iter=100,
                      jump=0.002,
@@ -83,10 +88,10 @@ cv_regsem = function(model,
                     ncore=2,
                     Start="lavaan",
                     subOpt="nlminb",
-                    pars_pen=NULL,
                     diff_par=NULL,
                     LB=-Inf,
                     UB=Inf,
+                    par.lim=c(-Inf,Inf),
                     block=TRUE,
                     full=TRUE,
                     calc="normal",
@@ -94,8 +99,8 @@ cv_regsem = function(model,
                     tol=1e-5,
                     solver=FALSE,
                     solver.maxit=5,
-                    alpha.inc=TRUE,
-                    step=.5,
+                    alpha.inc=FALSE,
+                    step=.1,
                     momentum=FALSE,
                     step.ratio=FALSE,
                     nlminb.control=list(),
@@ -139,6 +144,8 @@ if(mult.start==FALSE){
     itt = 0
     Start = par.matrix[count-1,]
     Start[pars_pen] = Start[pars_pen]-jump
+  }else if(fits[count-1,2] == 99){
+    Start="lavaan"
   }else{
     itt = itt + 1
     Start = par.matrix[count-itt-1,]
@@ -155,6 +162,7 @@ if(mult.start==FALSE){
                    diff_par=diff_par,
                    LB=LB,
                    UB=UB,
+                  par.lim=par.lim,
                    block=block,
                    full=full,
                    calc=calc,
@@ -163,7 +171,8 @@ if(mult.start==FALSE){
                   solver.maxit=solver.maxit,
                   alpha.inc=alpha.inc,
                   step=step,
-                  momentum=momentum,
+                max.iter=max.iter,
+                momentum=momentum,
                   step.ratio=step.ratio,
                    nlminb.control=nlminb.control,
                    missing=missing)
@@ -171,29 +180,34 @@ if(mult.start==FALSE){
 
   }else if(mult.start==TRUE){
 
-    if(warm.start==FALSE | count == 1){
+    if(warm.start==FALSE | count == 1 | count == 99){
       itt = 0
       Start2=NULL
     }else if(fits[count-1,2] == 0){
       itt = 0
       Start2 = par.matrix[count-1,]
       Start2[pars_pen] = Start2[pars_pen]-jump
+    }else if(fits[count-1,2] == 99){
+      Start="lavaan"
     }else{
       itt = itt + 1
       Start2 = par.matrix[count-itt-1,]
       Start2[pars_pen] = Start2[pars_pen]-itt*jump
     }
    out <- multi_optim(model=model,max.try=multi.iter,lambda=SHRINK,
-                      LB=LB,UB=UB,type=type,optMethod=optMethod,
+                      LB=LB,UB=UB,par.lim=par.lim,
+                      type=type,optMethod=optMethod,
                       gradFun=gradFun,hessFun=hessFun,
                       tol=tol,
                       solver=solver,
                       solver.maxit=solver.maxit,
+                      max.iter=max.iter,
                       full=full,
                       block=block,
                       alpha.inc=alpha.inc,
-                      step=step,Start2=Start2,
+                      step=step,
                       momentum=momentum,
+                      Start2=Start2,
                       step.ratio=step.ratio,nlminb.control=nlminb.control,
                       pars_pen=pars_pen,diff_par=NULL)
 

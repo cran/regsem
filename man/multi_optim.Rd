@@ -5,11 +5,12 @@
 \title{Multiple starts for Regularized Structural Equation Modeling}
 \usage{
 multi_optim(model, max.try = 10, lambda = 0, LB = -Inf, UB = Inf,
-  block = TRUE, full = TRUE, type = "none", optMethod = "default",
-  gradFun = "ram", pars_pen = NULL, diff_par = NULL, hessFun = "none",
-  tol = 1e-05, solver = FALSE, solver.maxit = 50000, alpha.inc = TRUE,
-  step = 0.5, momentum = FALSE, step.ratio = FALSE, verbose = FALSE,
-  warm.start = FALSE, Start2 = NULL, nlminb.control = NULL)
+  par.lim = c(-Inf, Inf), block = TRUE, full = TRUE, type = "none",
+  optMethod = "default", gradFun = "ram", pars_pen = NULL,
+  diff_par = NULL, hessFun = "none", tol = 1e-05, solver = FALSE,
+  solver.maxit = 50000, alpha.inc = FALSE, step = 0.1, momentum = FALSE,
+  step.ratio = FALSE, verbose = FALSE, warm.start = FALSE,
+  Start2 = NULL, nlminb.control = NULL, max.iter = 500)
 }
 \arguments{
 \item{model}{Lavaan output object. This is a model that was previously
@@ -35,16 +36,21 @@ converging.}
 
 \item{UB}{Upper bound vector}
 
+\item{par.lim}{Vector of minimum and maximum parameter estimates. Used to
+stop optimization and move to new starting values if violated.}
+
 \item{block}{Whether to use block coordinate descent}
 
 \item{full}{Whether to do full gradient descent or block}
 
 \item{type}{Penalty type. Options include "none", "lasso", "ridge",
 "enet" for the elastic net,
-"alasso" for the adaptive lasso, "scad, "mcp",
+"alasso" for the adaptive lasso
 and "diff_lasso". diff_lasso penalizes the discrepency between
 parameter estimates and some pre-specified values. The values
-to take the deviation from are specified in diff_par.}
+to take the deviation from are specified in diff_par. Two methods for
+sparser results than lasso are the smooth clipped absolute deviation,
+"scad", and the minimum concave penalty, "mcp".}
 
 \item{optMethod}{Solver to use. Recommended options include "nlminb" and
 "optimx". Note: for "optimx", the default method is to use nlminb.
@@ -77,7 +83,7 @@ calculating the hessian. This is slower and less accurate.}
 
 \item{step}{Step size}
 
-\item{momentum}{Logical for coord_desc}
+\item{momentum}{Momentum for step sizes}
 
 \item{step.ratio}{Ratio of step size between A and S. Logical}
 
@@ -89,6 +95,8 @@ This is not recommended.}
 \item{Start2}{Provided starting values. Not required}
 
 \item{nlminb.control}{list of control values to pass to nlminb}
+
+\item{max.iter}{Number of iterations for coordinate descent}
 }
 \description{
 Multiple starts for Regularized Structural Equation Modeling
@@ -120,4 +128,3 @@ summary(fit3)
 }
 \keyword{multiple}
 \keyword{optim}
-
