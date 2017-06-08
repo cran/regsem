@@ -17,6 +17,7 @@
 #' @param max.try number of starts to try before convergence.
 #' @param lambda Penalty value. Note: higher values will result in additional
 #'        convergence issues.
+#' @param alpha Mixture for elastic net.
 #' @param LB lower bound vector. Note: This is very important to specify
 #'        when using regularization. It greatly increases the chances of
 #'        converging.
@@ -25,10 +26,11 @@
 #'        stop optimization and move to new starting values if violated.
 #' @param block Whether to use block coordinate descent
 #' @param full Whether to do full gradient descent or block
-#' @param type Penalty type. Options include "none", "lasso", "ridge",
+#' @param type Penalty type. Options include "none", "lasso",
 #'        "enet" for the elastic net,
 #'        "alasso" for the adaptive lasso
-#'        and "diff_lasso". diff_lasso penalizes the discrepency between
+#'        and "diff_lasso". If ridge penalties are desired, use type="enet" and
+#'        alpha=1. diff_lasso penalizes the discrepency between
 #'        parameter estimates and some pre-specified values. The values
 #'        to take the deviation from are specified in diff_par. Two methods for
 #'        sparser results than lasso are the smooth clipped absolute deviation,
@@ -51,6 +53,7 @@
 #'        calculating the hessian. This is slower and less accurate.
 #' @param tol Tolerance for coordinate descent
 #' @param solver Whether to use solver for coord_desc
+#' @param quasi Whether to use quasi-Newton
 #' @param solver.maxit Max iterations for solver in coord_desc
 #' @param alpha.inc Whether alpha should increase for coord_desc
 #' @param step Step size
@@ -92,19 +95,21 @@
 
 
 multi_optim <- function(model,max.try=10,lambda=0,
+                        alpha=.5,
                          LB=-Inf,
                         UB=Inf,
                         par.lim=c(-Inf,Inf),
                         block=TRUE,
                         full=TRUE,
                         type="none",
-                        optMethod="default",
+                        optMethod="coord_desc",
                         gradFun="ram",
                         pars_pen=NULL,
                         diff_par=NULL,
                         hessFun="none",
                         tol=1e-5,
                         solver=FALSE,
+                        quasi=FALSE,
                         solver.maxit=50000,
                         alpha.inc=FALSE,
                         step=.1,
@@ -137,6 +142,10 @@ multi_optim <- function(model,max.try=10,lambda=0,
 #    warning("At this time, only gradFun=ram recommended with lasso penalties")
 #  }
 
+  if(type=="ridge"){
+    type="enet";alpha=1
+  }
+
 
 #if(warm.start==TRUE){
 #  stop("warm start not currently functioning")
@@ -162,13 +171,14 @@ multi_optim <- function(model,max.try=10,lambda=0,
 
   sss = seq(1,max.try)
 
-    mult_run <- function(model,n.try=1,lambda,LB=-Inf,tol,
+    mult_run <- function(model,n.try=1,lambda,LB=-Inf,tol,alpha,
                          UB=Inf,
                          par.lim,
                          block,
                          full,
                          type,optMethod,warm.start,
                          solver,
+                         quasi,
                          solver.maxit,
                          alpha.inc,
                          step,
@@ -208,10 +218,11 @@ multi_optim <- function(model,max.try=10,lambda=0,
        # }
 
 
-        fit1 <- suppressWarnings(try(regsem(model,lambda=lambda,type=type,optMethod=optMethod,
+        fit1 <- suppressWarnings(try(regsem(model,lambda=lambda,alpha=alpha,type=type,optMethod=optMethod,
                                             Start=start.optim,gradFun=gradFun,hessFun=hessFun,
                                             nlminb.control=nlminb.control,tol=tol,
                                             solver=solver,
+                                            quasi=quasi,
                                             block=block,
                                             par.lim=par.lim,
                                             full=full,
@@ -262,9 +273,10 @@ iter.optim = iter.optim + 1
 
 
 
-    ret.mult = mult_run(model,n.try=1,lambda=lambda,LB,UB,type,warm.start=warm.start,
+    ret.mult = mult_run(model,n.try=1,lambda=lambda,alpha=alpha,LB,UB,type,warm.start=warm.start,
                         nlminb.control=nlminb.control,tol=tol,
                         solver=solver,
+                        quasi=quasi,
                         block=block,
                         par.lim=par.lim,
                         full=full,
@@ -323,10 +335,11 @@ iter.optim = iter.optim + 1
       }else{
         Start="default"
       }
-      fit1 <- suppressWarnings(regsem(model,lambda=lambda,type=type,optMethod=optMethod,
+      fit1 <- suppressWarnings(regsem(model,lambda=lambda,alpha=alpha,type=type,optMethod=optMethod,
                      Start=Start,gradFun=gradFun,hessFun=hessFun,
                      nlminb.control=nlminb.control,tol=tol,
                      solver=solver,
+                     quasi=quasi,
                      block=block,
                      full=full,
                      par.lim=par.lim,

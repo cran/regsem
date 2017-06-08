@@ -16,12 +16,13 @@
 #' @param lambda Penalty value. Note: higher values will result in additional
 #'        convergence issues. If using values > 0.1, it is recommended to use
 #'        mutli_optim() instead. See \code{\link{multi_optim}} for more detail.
-#' @param alpha Mixture for elastic net. Not currently working applied.
+#' @param alpha Mixture for elastic net. 1 = ridge, 0 = lasso
 #' @param gamma Additional penalty for MCP and SCAD
-#' @param type Penalty type. Options include "none", "lasso", "ridge",
+#' @param type Penalty type. Options include "none", "lasso",
 #'        "enet" for the elastic net,
 #'        "alasso" for the adaptive lasso
-#'        and "diff_lasso". diff_lasso penalizes the discrepency between
+#'        and "diff_lasso". If ridge penalties are desired, use type="enet" and
+#'        alpha=1. diff_lasso penalizes the discrepency between
 #'        parameter estimates and some pre-specified values. The values
 #'        to take the deviation from are specified in diff_par. Two methods for
 #'        sparser results than lasso are the smooth clipped absolute deviation,
@@ -50,7 +51,8 @@
 #'        the sample covariance used.
 #' @param pars_pen Parameter indicators to penalize. If left NULL, by default,
 #'        all parameters in the \emph{A} matrix outside of the intercepts are
-#'        penalized when lambda > 0 and type != "none".
+#'        penalized when lambda > 0 and type != "none". Can use the parameter
+#'        labels from the lavaan model as well.
 #' @param diff_par Parameter values to deviate from. Only used when
 #'        type="diff_lasso".
 #' @param LB lower bound vector. Note: This is very important to specify
@@ -67,6 +69,7 @@
 #' @param max.iter Number of iterations for coordinate descent
 #' @param tol Tolerance for coordinate descent
 #' @param solver Whether to use solver for coord_desc
+#' @param quasi Whether to use quasi-Newton
 #' @param solver.maxit Max iterations for solver in coord_desc
 #' @param alpha.inc Whether alpha should increase for coord_desc
 #' @param step Step size
@@ -98,26 +101,28 @@
 #' @useDynLib regsem, .registration=TRUE
 #' @import Rcpp
 #' @import lavaan
-#' @importFrom stats cov na.omit nlminb pchisq rnorm runif sd uniroot var weighted.mean
-#' @importFrom graphics abline lines plot
+#' @importFrom stats cov na.omit nlminb pchisq rnorm runif sd uniroot var weighted.mean cov2cor
+#' @importFrom graphics abline lines plot points
 #' @export
 #' @examples
 #' library(lavaan)
 #' HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 #' mod <- '
-#' f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
+#' f =~ 1*x1 + l1*x2 + l2*x3 + l3*x4 + l4*x5 + l5*x6 + l6*x7 + l7*x8 + l8*x9
 #' '
 #' # Recommended to specify meanstructure in lavaan
 #' outt = cfa(mod,HS,meanstructure=TRUE)
 #'
-#' fit1 <- regsem(outt,lambda=0.05,type="lasso",pars_pen=c(1:2,6:8))
+#' fit1 <- regsem(outt,lambda=0.05,type="lasso",
+#'   pars_pen=c("l1","l2","l6","l7","l8"))
+#' #equivalent to pars_pen=c(1:2,6:8)
 #' #summary(fit1)
 
 
 
 
 
-regsem = function(model,lambda=0,alpha=0,gamma=3.7, type="none",data=NULL,optMethod="default",
+regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="none",data=NULL,optMethod="coord_desc",
                  gradFun="ram",hessFun="none",parallel="no",Start="lavaan",
                  subOpt="nlminb",longMod=F,
                  pars_pen=NULL,
@@ -131,6 +136,7 @@ regsem = function(model,lambda=0,alpha=0,gamma=3.7, type="none",data=NULL,optMet
                  max.iter=500,
                  tol=1e-5,
                  solver=FALSE,
+                 quasi=FALSE,
                  solver.maxit=5,
                  alpha.inc=FALSE,
                  step=.1,
@@ -141,23 +147,26 @@ regsem = function(model,lambda=0,alpha=0,gamma=3.7, type="none",data=NULL,optMet
 
   e_alpha=alpha
 
-
   if(type == "scad" | type == "mcp"){
     warning("this type is currently not working well")
   }
-  if(optMethod=="default" & type=="lasso" | type=="diff_lasso" |
-     type=="enet" | type=="alasso" | type=="scad" | type=="mcp"){
-      optMethod<-"coord_desc"
-  }
 
-  if(optMethod=="default" & type=="ridge" | type=="none"){
-    optMethod <- "nlminb"
+  if(type=="ridge"){
+    type="enet";alpha=1
   }
 
 
-  if(optMethod!="nlminb" & optMethod !="coord_desc"){
-    stop("only optmethod==nlminb or coord_desc is currently supported well")
+
+  # turn parameter labels into numbers
+
+  if(is.null(pars_pen)==FALSE & is.numeric(pars_pen)==FALSE){
+    print(parse_parameters(pars_pen,model))
+    pars_pen <- parse_parameters(pars_pen,model)
   }
+
+
+
+
 
 #  if(optMethod=="nlminb"& type !="ridge" | type != "none"){
 #    stop("Only optMethod=coord_desc is recommended for use")
@@ -190,9 +199,9 @@ regsem = function(model,lambda=0,alpha=0,gamma=3.7, type="none",data=NULL,optMet
   #    stop("Only recommended grad function is ram or none at this time")
  #   }
 
-  if(type=="ridge" & gradFun != "none"){
-    warning("At this time, only gradFun=none recommended with ridge penalties")
-  }
+#  if(type=="ridge" & gradFun != "none"){
+#    warning("At this time, only gradFun=none recommended with ridge penalties")
+#  }
 
  # if(type=="ridge" & optMethod != "nlminb"){
  #   stop("For ridge, only use optMethod=nlminb and gradFun=none")
@@ -331,6 +340,7 @@ regsem = function(model,lambda=0,alpha=0,gamma=3.7, type="none",data=NULL,optMet
   F <- mats$F
   I <- diag(nrow(A))
 
+  pars_pen <- parse_parameters(pars_pen, model)
 
 
     if(is.null(pars_pen) == TRUE){
@@ -359,7 +369,6 @@ regsem = function(model,lambda=0,alpha=0,gamma=3.7, type="none",data=NULL,optMet
 
      }
    }
-
 
 
 
@@ -466,12 +475,12 @@ regsem = function(model,lambda=0,alpha=0,gamma=3.7, type="none",data=NULL,optMet
         if(type2==1 | type2==3 | type2 ==4 | type2==6 | type2==7) type2=0
 
 
-        ret = rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
+        ret = 2*rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
                             Sreg=mult$S_est22,A,S,
                             F,lambda,type2=type2,pars_pen,diff_par=0)
       }else{
 
-           ret = rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
+           ret = 2*rcpp_grad_ram(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A_est22,
                            Sreg=mult$S_est22,A,S,
                              F,lambda,type2=type2,pars_pen,diff_par=0)
         }
@@ -508,7 +517,7 @@ stop("gradFun = auto is not supported at this time")
 
   if(hessFun=="norm"){
 
-    if(parallel=="no"){
+
 
     hess = function(start){
 
@@ -518,19 +527,10 @@ stop("gradFun = auto is not supported at this time")
                  S,S_fixed,S_est,F)
         retH
     }
-  } else if(parallel=="yes"){
-    stop("not supported")
-  #  hess = function(start){
-  #  mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
-    #mult = RAMmult(par=start,A,S,F,A.fixed,A.est,S.fixed,S.est)
-  #  retH = hessian_parallel(par=start,ImpCov=mult$ImpCov,A,A.fixed,A.est,
-  #                 S,S.fixed,S.est,F)
-   # retH
-#  }
-}
+
 }  else if(hessFun=="ram"){
 
-    if(parallel=="no"){
+
     hess = function(start){
 
       mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
@@ -539,16 +539,7 @@ stop("gradFun = auto is not supported at this time")
                       Sreg=mult$S_est22,A,S,F)
       ret
     }
-  } else if(parallel=="yes"){
-      hess = function(start){
-        mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
-        #mult = RAMmult(par=start,A,S,F,A.fixed,A.est,S.fixed,S.est)
-        ret = hess_ramParallel(par=start,ImpCov=mult$ImpCov,SampCov,Areg = mult$A.est22,
-                        Sreg=mult$S.est22,A,S,F)
-        ret
-      }
 
-    }
 } else if(hessFun=="numDeriv"){
   hess = function(start){
 
@@ -784,7 +775,7 @@ if(optMethod=="nlminb"){
                    alpha.inc=alpha.inc,step=step,momentum=momentum,
                    e_alpha=e_alpha,gamma=gamma,
                    par.lim=par.lim,
-                   step.ratio=step.ratio,diff_par=diff_par,pen_vec=pen_vec)
+                   step.ratio=step.ratio,diff_par=diff_par,pen_vec=pen_vec,quasi=quasi)
   res$out <- out
   res$optim_fit <- out$value
   #print(out$convergence)
@@ -892,24 +883,24 @@ if(optMethod=="nlminb"){
     }
 
 
-    if(hessFun=="none"){
+#    if(hessFun=="none"){
       res$KKT2 = "hess not specified"
-    }else{
-      hess.mat = hess(as.numeric(pars.df))
-      eig = eigen(hess.mat)$values
-      hess.eigs = try(all(eig) > 1e-6)
-      if(inherits(hess.eigs, "try-error")){
-        res$KKT2 = "error"
-      }else{
-        if(hess.eigs == TRUE){
-          res$KKT2 = TRUE
-        }else if(hess.eigs == FALSE){
-          res$KKT2 = FALSE
-        }else{
-          res$KKT2 = NA
-        }
-      }
-    }
+#    }else{
+#      hess.mat = hess(as.numeric(pars.df))
+#      eig = eigen(hess.mat)$values
+#      hess.eigs = try(all(eig) > 1e-6)
+#      if(inherits(hess.eigs, "try-error")){
+#        res$KKT2 = "error"
+ #     }else{
+ #       if(hess.eigs == TRUE){
+#          res$KKT2 = TRUE
+#        }else if(hess.eigs == FALSE){
+#          res$KKT2 = FALSE
+#        }else{
+#          res$KKT2 = NA
+#        }
+#      }
+#    }
 
 
 
@@ -948,7 +939,7 @@ if(optMethod=="nlminb"){
     if(type=="none" | lambda==0){
       res$df = df
       res$npar = npar
-    }else if(type=="lasso" | type=="alasso" | type=="enet" | type=="scad" | type=="mcp"){
+    }else if(type=="lasso" | type=="alasso" | type=="enet" | type=="scad" | type=="mcp" & alpha < 1){
       #A_estim = A != 0
       #pars = A_est[A_estim]
       pars_sum = pars.df[pars_pen]
@@ -956,7 +947,7 @@ if(optMethod=="nlminb"){
       res$df = df + sum(pars_l2 < 0.001)
       res$npar = npar - sum(pars_l2 < 0.001)
 
-    }else if(type=="ridge"){
+    }else if(type=="ridge" | alpha == 1){
       #ratio1 <- sqrt(pars.df[pars_pen]**2)/sqrt(mats$parameters[pars_pen]**2)
       res$df = df #+ length(ratio1) - sum(ratio1)
       res$npar = npar #- sum(ratio1)
@@ -1000,9 +991,10 @@ if(optMethod=="nlminb"){
                              type2,lambda,pen_vec=0,pen_diff=0,e_alpha=0,gamma=0)
 
     }
-
+    SampCov2 <- SampCov
     SampCov <- model@SampleStats@cov[][[1]]
     res$SampCov = SampCov
+    res$SampCov2 <- SampCov2
 
     res$data <- as.data.frame(model@Data@X)
 

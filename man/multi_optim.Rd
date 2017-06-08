@@ -4,13 +4,14 @@
 \alias{multi_optim}
 \title{Multiple starts for Regularized Structural Equation Modeling}
 \usage{
-multi_optim(model, max.try = 10, lambda = 0, LB = -Inf, UB = Inf,
-  par.lim = c(-Inf, Inf), block = TRUE, full = TRUE, type = "none",
-  optMethod = "default", gradFun = "ram", pars_pen = NULL,
-  diff_par = NULL, hessFun = "none", tol = 1e-05, solver = FALSE,
-  solver.maxit = 50000, alpha.inc = FALSE, step = 0.1, momentum = FALSE,
-  step.ratio = FALSE, verbose = FALSE, warm.start = FALSE,
-  Start2 = NULL, nlminb.control = NULL, max.iter = 500)
+multi_optim(model, max.try = 10, lambda = 0, alpha = 0.5, LB = -Inf,
+  UB = Inf, par.lim = c(-Inf, Inf), block = TRUE, full = TRUE,
+  type = "none", optMethod = "coord_desc", gradFun = "ram",
+  pars_pen = NULL, diff_par = NULL, hessFun = "none", tol = 1e-05,
+  solver = FALSE, quasi = FALSE, solver.maxit = 50000,
+  alpha.inc = FALSE, step = 0.1, momentum = FALSE, step.ratio = FALSE,
+  verbose = FALSE, warm.start = FALSE, Start2 = NULL,
+  nlminb.control = NULL, max.iter = 500)
 }
 \arguments{
 \item{model}{Lavaan output object. This is a model that was previously
@@ -30,6 +31,8 @@ sample covariance matrix.}
 \item{lambda}{Penalty value. Note: higher values will result in additional
 convergence issues.}
 
+\item{alpha}{Mixture for elastic net.}
+
 \item{LB}{lower bound vector. Note: This is very important to specify
 when using regularization. It greatly increases the chances of
 converging.}
@@ -43,10 +46,11 @@ stop optimization and move to new starting values if violated.}
 
 \item{full}{Whether to do full gradient descent or block}
 
-\item{type}{Penalty type. Options include "none", "lasso", "ridge",
+\item{type}{Penalty type. Options include "none", "lasso",
 "enet" for the elastic net,
 "alasso" for the adaptive lasso
-and "diff_lasso". diff_lasso penalizes the discrepency between
+and "diff_lasso". If ridge penalties are desired, use type="enet" and
+alpha=1. diff_lasso penalizes the discrepency between
 parameter estimates and some pre-specified values. The values
 to take the deviation from are specified in diff_par. Two methods for
 sparser results than lasso are the smooth clipped absolute deviation,
@@ -76,6 +80,8 @@ calculating the hessian. This is slower and less accurate.}
 \item{tol}{Tolerance for coordinate descent}
 
 \item{solver}{Whether to use solver for coord_desc}
+
+\item{quasi}{Whether to use quasi-Newton}
 
 \item{solver.maxit}{Max iterations for solver in coord_desc}
 

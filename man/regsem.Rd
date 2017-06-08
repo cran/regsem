@@ -4,13 +4,14 @@
 \alias{regsem}
 \title{Regularized Structural Equation Modeling}
 \usage{
-regsem(model, lambda = 0, alpha = 0, gamma = 3.7, type = "none",
-  data = NULL, optMethod = "default", gradFun = "ram", hessFun = "none",
-  parallel = "no", Start = "lavaan", subOpt = "nlminb", longMod = F,
-  pars_pen = NULL, diff_par = NULL, LB = -Inf, UB = Inf,
-  par.lim = c(-Inf, Inf), block = TRUE, full = TRUE, calc = "normal",
-  max.iter = 500, tol = 1e-05, solver = FALSE, solver.maxit = 5,
-  alpha.inc = FALSE, step = 0.1, momentum = FALSE, step.ratio = FALSE,
+regsem(model, lambda = 0, alpha = 0.5, gamma = 3.7, type = "none",
+  data = NULL, optMethod = "coord_desc", gradFun = "ram",
+  hessFun = "none", parallel = "no", Start = "lavaan",
+  subOpt = "nlminb", longMod = F, pars_pen = NULL, diff_par = NULL,
+  LB = -Inf, UB = Inf, par.lim = c(-Inf, Inf), block = TRUE,
+  full = TRUE, calc = "normal", max.iter = 500, tol = 1e-05,
+  solver = FALSE, quasi = FALSE, solver.maxit = 5, alpha.inc = FALSE,
+  step = 0.1, momentum = FALSE, step.ratio = FALSE,
   nlminb.control = list(), missing = "listwise")
 }
 \arguments{
@@ -30,14 +31,15 @@ sample covariance matrix.}
 convergence issues. If using values > 0.1, it is recommended to use
 mutli_optim() instead. See \code{\link{multi_optim}} for more detail.}
 
-\item{alpha}{Mixture for elastic net. Not currently working applied.}
+\item{alpha}{Mixture for elastic net. 1 = ridge, 0 = lasso}
 
 \item{gamma}{Additional penalty for MCP and SCAD}
 
-\item{type}{Penalty type. Options include "none", "lasso", "ridge",
+\item{type}{Penalty type. Options include "none", "lasso",
 "enet" for the elastic net,
 "alasso" for the adaptive lasso
-and "diff_lasso". diff_lasso penalizes the discrepency between
+and "diff_lasso". If ridge penalties are desired, use type="enet" and
+alpha=1. diff_lasso penalizes the discrepency between
 parameter estimates and some pre-specified values. The values
 to take the deviation from are specified in diff_par. Two methods for
 sparser results than lasso are the smooth clipped absolute deviation,
@@ -75,7 +77,8 @@ the sample covariance used.}
 
 \item{pars_pen}{Parameter indicators to penalize. If left NULL, by default,
 all parameters in the \emph{A} matrix outside of the intercepts are
-penalized when lambda > 0 and type != "none".}
+penalized when lambda > 0 and type != "none". Can use the parameter
+labels from the lavaan model as well.}
 
 \item{diff_par}{Parameter values to deviate from. Only used when
 type="diff_lasso".}
@@ -101,6 +104,8 @@ for use.}
 \item{tol}{Tolerance for coordinate descent}
 
 \item{solver}{Whether to use solver for coord_desc}
+
+\item{quasi}{Whether to use quasi-Newton}
 
 \item{solver.maxit}{Max iterations for solver in coord_desc}
 
@@ -162,12 +167,14 @@ Regularized Structural Equation Modeling
 library(lavaan)
 HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 mod <- '
-f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
+f =~ 1*x1 + l1*x2 + l2*x3 + l3*x4 + l4*x5 + l5*x6 + l6*x7 + l7*x8 + l8*x9
 '
 # Recommended to specify meanstructure in lavaan
 outt = cfa(mod,HS,meanstructure=TRUE)
 
-fit1 <- regsem(outt,lambda=0.05,type="lasso",pars_pen=c(1:2,6:8))
+fit1 <- regsem(outt,lambda=0.05,type="lasso",
+  pars_pen=c("l1","l2","l6","l7","l8"))
+#equivalent to pars_pen=c(1:2,6:8)
 #summary(fit1)
 }
 \keyword{calc}
