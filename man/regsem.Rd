@@ -2,16 +2,17 @@
 % Please edit documentation in R/regsem.R
 \name{regsem}
 \alias{regsem}
-\title{Regularized Structural Equation Modeling}
+\title{Regularized Structural Equation Modeling. Tests a single penalty. For
+testing multiple penalties, see cv_regsem().}
 \usage{
-regsem(model, lambda = 0, alpha = 0.5, gamma = 3.7, type = "none",
+regsem(model, lambda = 0, alpha = 0.5, gamma = 3.7, type = "lasso",
   data = NULL, optMethod = "coord_desc", gradFun = "ram",
   hessFun = "none", parallel = "no", Start = "lavaan",
   subOpt = "nlminb", longMod = F, pars_pen = NULL, diff_par = NULL,
   LB = -Inf, UB = Inf, par.lim = c(-Inf, Inf), block = TRUE,
   full = TRUE, calc = "normal", max.iter = 500, tol = 1e-05,
   solver = FALSE, quasi = FALSE, solver.maxit = 5, alpha.inc = FALSE,
-  step = 0.1, momentum = FALSE, step.ratio = FALSE,
+  line.search = FALSE, step = 0.1, momentum = FALSE, step.ratio = FALSE,
   nlminb.control = list(), missing = "listwise")
 }
 \arguments{
@@ -111,6 +112,8 @@ for use.}
 
 \item{alpha.inc}{Whether alpha should increase for coord_desc}
 
+\item{line.search}{Use line search for optimization. Default is no, use fixed step size}
+
 \item{step}{Step size}
 
 \item{momentum}{Momentum for step sizes}
@@ -161,20 +164,22 @@ baseline.chisq Baseline chi-square.
 baseline.df Baseline degrees of freedom.
 }
 \description{
-Regularized Structural Equation Modeling
+Regularized Structural Equation Modeling. Tests a single penalty. For
+testing multiple penalties, see cv_regsem().
 }
 \examples{
 library(lavaan)
+# put variables on same scale for regsem
 HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 mod <- '
 f =~ 1*x1 + l1*x2 + l2*x3 + l3*x4 + l4*x5 + l5*x6 + l6*x7 + l7*x8 + l8*x9
 '
 # Recommended to specify meanstructure in lavaan
-outt = cfa(mod,HS,meanstructure=TRUE)
+outt = cfa(mod, HS, meanstructure=TRUE)
 
-fit1 <- regsem(outt,lambda=0.05,type="lasso",
-  pars_pen=c("l1","l2","l6","l7","l8"))
-#equivalent to pars_pen=c(1:2,6:8)
+fit1 <- regsem(outt, lambda=0.05, type="lasso",
+  pars_pen=c("l1", "l2", "l6", "l7", "l8"))
+#equivalent to pars_pen=c(1:2, 6:8)
 #summary(fit1)
 }
 \keyword{calc}

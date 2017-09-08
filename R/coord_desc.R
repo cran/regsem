@@ -1,7 +1,8 @@
 
 coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,mats,
                        block,max.iter,tol,full,solver,solver.maxit,alpha.inc,step,
-                       step.ratio,diff_par,pen_vec,e_alpha,gamma,momentum,par.lim,quasi){
+                       step.ratio,diff_par,pen_vec,e_alpha,gamma,momentum,par.lim,quasi,
+                       line.search,pen_vec_ml){
   count = 0
   ret <- list()
   max.iter = max.iter
@@ -14,7 +15,6 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
  # if(type=="enet"){
  #   step=step*2
  # }
-  line.search=FALSE
 
   if(step.ratio == TRUE){
     alpha1 <- .01*step
@@ -112,7 +112,7 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
              }else if(type=="alasso" & lambda > 0){
                 for(j in pars_pen){
                  #print(update.pars[j])
-                 update.pars[j] <- soft(pen_vec[j],lambda,type,step=alpha,e_alpha,gamma)
+                 update.pars[j] <- soft(update.pars[j]*(1/pen_vec_ml[j]),lambda,type,step=alpha,e_alpha,gamma)
                }
              }
 
@@ -120,18 +120,23 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
           } #end delta
 
 
-         c=.5
-          p=cbind(rep(0.5,length(new.pars[count,])))#update.pars-new.pars[count,]
+          if(line.search==TRUE){
+            c=.5
+            p=cbind(rep(0.5,length(new.pars[count,])))#update.pars-new.pars[count,]
 
-          alpha=1
-          if(count==1){
-            alpha =step =1
-            #
-          }else{
-            while(delta(alpha) > func(update.pars)+c*alpha*(t(gg)%*%p)){
-              alpha = 0.8*alpha
+            alpha=1
+            if(count==1){
+              alpha =step =1
+              #
+            }else{
+              while(delta(alpha) > func(update.pars)+c*alpha*(t(gg)%*%p)){
+                alpha = 0.8*alpha
+              }
             }
+          }else{
+            alpha=alpha
           }
+
 
 
           # works well with momentum -- delta{only contains func(update.pars)}
@@ -160,7 +165,7 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
            }else if(type=="alasso" & lambda > 0){
              for(j in pars_pen){
                #print(update.pars[j])
-               update.pars[j] <- soft(pen_vec[j],lambda,type,step=alpha,e_alpha,gamma)
+               update.pars[j] <- soft(update.pars[j]*(1/pen_vec_ml[j]),lambda,type,step=alpha,e_alpha,gamma)
              }
            }
 
@@ -228,7 +233,7 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
               update.pars <- update.pars
             }else if(type!="none" & type!="ridge" & type!="diff_lasso" & lambda > 0){
               for(j in pars_pen){
-                update.pars[j] <- soft(update.pars[j],lambda,type,step=alpha,e_alpha,gamma)
+                update.pars[j] <- soft(update.pars[j],lambda,type,step=1,e_alpha,gamma)
               }
             }else if(type=="diff_lasso" & lambda > 0){
               cc=0
@@ -238,12 +243,12 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
                 #print(pen_diff[j])
                 #print(soft(pen_diff[j],lambda,type="lasso",step=alpha1,e_alpha,gamma))
                 update.pars[j] <- update.pars[j] -
-                  pen_diff[cc] - soft(pen_diff[cc],lambda,type="lasso",step=alpha,e_alpha,gamma)
+                  pen_diff[cc] - soft(pen_diff[cc],lambda,type="lasso",step=1,e_alpha,gamma)
               }
             }else if(type=="alasso" & lambda > 0){
               for(j in pars_pen){
                 #print(update.pars[j])
-                update.pars[j] <- soft(pen_vec[j],lambda,type,step=alpha,e_alpha,gamma)
+                update.pars[j] <- soft(update.pars[j]*(1/pen_vec_ml[j]),lambda,type,step=1,e_alpha,gamma)
               }
             }
 
@@ -261,52 +266,59 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
                 1*sqrt(sum(pars[pars_pen]**2))
               }else if(type=="lasso"){
                 1*sum(abs(pars[pars_pen]))
+              }else if(type=="alasso"){
+                sum(abs(pars[pars_pen])*abs(1/pen_vec_ml))
               }else{
                 stop("quasi is currently not supported for that type of penalty")
               }
             }
 
 
-
-          vv <- t(grad.vec[count,])%*%v
-          fmin.old <-  func(new.pars[count,])
-          soft.old <- h(new.pars[count,])
-          alpha= alpha
-          c = 0.05 # previously 0.001 worked well; removed 0.5
-
-         # if(count==1){
-        #    alpha =step =1
-            #
-         # }else{
+            if(line.search==FALSE){
+              alpha=step
+            }else{
+              vv <- t(grad.vec[count,])%*%v
+              fmin.old <-  func(new.pars[count,])
+              soft.old <- h(new.pars[count,])
+              alpha= alpha
+              c = 0.5 # previously 0.001 worked well; removed 0.5 0.8.1 set at 0.05
+              # p. 102 of "sparsity" recommend 0.5, and then 0.8*alpha below
 
 
+              # not changing alpha
+              bool=FALSE
+              while(bool==FALSE){
 
-          # not changing alpha
-            bool=FALSE
-            while(bool==FALSE){
-
-              if(is.na(func(new.pars[count,]+alpha*v))){
-                alpha=.1
-                break
-              }else if(is.na(fmin.old+c*alpha*(vv))){
-                alpha = .1
-                break
-              }else if(is.na(c*((h(new.pars[count,]+alpha*v)-soft.old)))){
-                alpha = .1
-                break
-              }else{
-                if(func(new.pars[count,]+alpha*v) > fmin.old+c*alpha*(vv) + c*((h(new.pars[count,]+alpha*v)-soft.old))){
-                  alpha = 0.5*alpha
-                  bool=FALSE
-                }else{
-                  bool=TRUE
+                if(alpha < 0.1){
+                  alpha = 0.1; break
                 }
 
+                if(is.na(func(new.pars[count,]+alpha*v))){
+                  alpha=.1
+                  break
+                }else if(is.na(fmin.old+c*alpha*(vv))){
+                  alpha = .1
+                  break
+                }else if(is.na(c*((h(new.pars[count,]+alpha*v)-soft.old)))){
+                  alpha = .1
+                  break
+                }else{
+                  if(func(new.pars[count,]+alpha*v) > fmin.old+c*alpha*(vv) + c*((h(new.pars[count,]+alpha*v)-soft.old))){
+                    alpha = 0.8*alpha
+                    bool=FALSE
+                  }else{
+                    bool=TRUE
+                  }
+
+                }
+
+
               }
-
-
             }
-#print(alpha)
+
+
+#alpha = .2
+            print(alpha)
           update.pars <- new.pars[count,] + alpha*(update.pars-new.pars[count,])
 
 
@@ -336,7 +348,7 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
           }else if(type=="alasso" & lambda > 0){
             for(j in pars_pen){
               #print(update.pars[j])
-              update.pars[j] <- soft(pen_vec[j],lambda,type,step=alpha1,e_alpha,gamma)
+              update.pars[j] <- soft(update.pars[j]*(1/pen_vec_ml[j]),lambda,type,step=alpha1,e_alpha,gamma)
             }
           }
 
@@ -439,7 +451,7 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
      }else if(type=="alasso" & lambda > 0){
        for(j in pars_pen){
          #print(update.pars[j])
-         update.pars[j] <- soft(pen_vec[j],lambda,type,step=alpha,e_alpha,gamma)
+         update.pars[j] <- soft(update.pars[j]*(1/pen_vec_ml[j]),lambda,type,step=alpha,e_alpha,gamma)
        }
      }
 
@@ -461,6 +473,7 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
     }else if(solver==TRUE){
 
       out <- nlminb(new.pars[count,],func,grad,control=list(iter.max=1,step.min=alpha,step.max=alpha))
+      #out <- lbfgs::lbfgs(func,grad,new.pars[count,],invisible=1)
       #out <- Rsolnp::solnp(new.pars[count,],func,control=list(trace=0))
       #print(out$objective)
       update.pars <- out$par #new.pars[count,] - alpha*(new.pars[count,] - out$par)
@@ -485,7 +498,7 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
       }else if(type=="alasso" & lambda > 0){
         for(j in pars_pen){
           #print(update.pars[j])
-          update.pars[j] <- soft(pen_vec[j],lambda,type,step=alpha,e_alpha,gamma)
+          update.pars[j] <- soft(update.pars[j]*(1/pen_vec_ml[j]),lambda,type,step=alpha,e_alpha,gamma)
         }
       }
 

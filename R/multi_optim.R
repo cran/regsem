@@ -56,6 +56,7 @@
 #' @param quasi Whether to use quasi-Newton
 #' @param solver.maxit Max iterations for solver in coord_desc
 #' @param alpha.inc Whether alpha should increase for coord_desc
+#' @param line.search Use line search for optimization. Default is no, use fixed step size
 #' @param step Step size
 #' @param momentum Momentum for step sizes
 #' @param step.ratio Ratio of step size between A and S. Logical
@@ -71,14 +72,15 @@
 #' \dontrun{
 #' # Note that this is not currently recommend. Use regsem() instead
 #' library(regsem)
-#' HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
+#' # put variables on same scale for regsem
+#' HS <- data.frame(scale(HolzingerSwineford1939[ ,7:15]))
 #' mod <- '
 #' f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
 #' '
-#' outt = cfa(mod,HS,meanstructure=TRUE)
+#' outt = cfa(mod, HS, meanstructure=TRUE)
 #'
-#' fit1 <- multi_optim(outt,max.try=40,
-#'                    lambda=0.1,type="lasso",
+#' fit1 <- multi_optim(outt, max.try=40,
+#'                    lambda=0.1, type="lasso",
 #'                    gradFun="ram")
 #'
 #'
@@ -89,7 +91,7 @@
 #'summary(fit)
 #'fitmeasures(fit)
 
-#'fit3 <- multi_optim(fit,lambda=0.2,type="ridge",gradFun="none")
+#'fit3 <- multi_optim(fit, lambda=0.2, type="lasso", gradFun="none")
 #'summary(fit3)
 #'}
 
@@ -101,7 +103,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                         par.lim=c(-Inf,Inf),
                         block=TRUE,
                         full=TRUE,
-                        type="none",
+                        type="lasso",
                         optMethod="coord_desc",
                         gradFun="ram",
                         pars_pen=NULL,
@@ -112,6 +114,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                         quasi=FALSE,
                         solver.maxit=50000,
                         alpha.inc=FALSE,
+                        line.search=FALSE,
                         step=.1,
                         momentum=FALSE,
                         step.ratio=FALSE,
@@ -184,6 +187,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                          step,
                          momentum,
                          max.iter,
+                         line.search,
                          step.ratio,
                          gradFun,n.optim,pars_pen,nlminb.control,
                          diff_par,hessFun,Start2){
@@ -229,6 +233,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                                             solver.maxit=solver.maxit,
                                             alpha.inc=alpha.inc,
                                             max.iter=max.iter,
+                                            line.search=line.search,
                                             step=step,
                                             momentum=momentum,
                                             step.ratio=step.ratio,
@@ -283,6 +288,7 @@ iter.optim = iter.optim + 1
                         solver.maxit=solver.maxit,
                         max.iter=max.iter,
                         alpha.inc=alpha.inc,
+                        line.search=line.search,
                         step=step,
                         momentum=momentum,
                         step.ratio=step.ratio,
@@ -347,6 +353,7 @@ iter.optim = iter.optim + 1
                      solver.maxit=solver.maxit,
                      alpha.inc=alpha.inc,
                      step=step,
+                     line.search=line.search,
                      momentum=momentum,
                      step.ratio=step.ratio,
                      LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par))

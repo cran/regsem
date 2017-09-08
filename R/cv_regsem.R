@@ -1,9 +1,23 @@
 #'
 #'
-#' The main function that ties together and runs the models.
-#' @param model lavaan output object.
+#' The main function that runs multiple penalty values.
+#'
+#' @param model Lavaan output object. This is a model that was previously
+#'        run with any of the lavaan main functions: cfa(), lavaan(), sem(),
+#'        or growth(). It also can be from the efaUnrotate() function from
+#'        the semTools package. Currently, the parts of the model which cannot
+#'        be handled in regsem is the use of multiple group models, missing
+#'        other than listwise, thresholds from categorical variable models,
+#'        the use of additional estimators other than
+#'        ML, most notably WLSMV for categorical variables. Note: the model
+#'        does not have to actually run (use do.fit=FALSE), converge etc...
+#'        regsem() uses the lavaan object as more of a parser and to get
+#'        sample covariance matrix.
 #' @param n.lambda number of penalization values to test.
 #' @param pars_pen parameter indicators to penalize.
+#' @param metric Which fit index to use to choose a final model?
+#'        Note that it chooses the best fit that also achieves convergence
+#'        (conv=0).
 #' @param mult.start Logical. Whether to use multi_optim() (TRUE) or
 #'         regsem() (FALSE).
 #' @param multi.iter maximum number of random starts for multi_optim
@@ -51,6 +65,7 @@
 #' @param step Step size
 #' @param momentum Momentum for step sizes
 #' @param step.ratio Ratio of step size between A and S. Logical
+#' @param line.search Use line search for optimization. Default is no, use fixed step size
 #' @param warm.start Whether start values are based on previous iteration.
 #'        This is not recommended.
 #' @param missing How to handle missing data. Current options are "listwise"
@@ -60,27 +75,41 @@
 #' @export
 #' @examples
 #' \dontrun{
-#' library(lavaan)
+#' library(regsem)
+#' # put variables on same scale for regsem
 #' HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 #' mod <- '
 #' f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
 #' '
+#' outt = cfa(mod, HS)
+#'
+#' cv.out = cv_regsem(outt,type="ridge", pars_pen=c(1:2,6:8), n.lambda=100)
+#' # check parameter numbers
+#' extractMatrices(outt)["A"]
+#' # equivalent to
+#' mod <- '
+#' f =~ 1*x1 + l1*x2 + l2*x3 + l3*x4 + l4*x5 + l5*x6 + l6*x7 + l7*x8 + l8*x9
+#' '
 #' outt = cfa(mod,HS)
 #'
-#' cv.out = cv_regsem(outt,type="ridge",gradFun="none",n.lambda=100)
-#'}
+#' cv.out = cv_regsem(outt, type="ridge", pars_pen=c("l1","l2","l6","l7","l8"),
+#'          n.lambda=100)
+#' summary(cv.out)
+#' plot(cv.out, show.minimum="BIC")
+#' }
 
 
 
 cv_regsem = function(model,
                      n.lambda=100,
-                     pars_pen=NULL,
+                     pars_pen,
+                     metric="BIC",
                      mult.start=FALSE,
                      multi.iter=10,
                      jump=0.002,
                      lambda.start=0,
                      alpha=.5,
-                     type="none",
+                     type="lasso",
                      fit.ret=c("rmsea","BIC"),
                      fit.ret2 = "train",
                      n.boot=20,
@@ -109,6 +138,7 @@ cv_regsem = function(model,
                     step=.1,
                     momentum=FALSE,
                     step.ratio=FALSE,
+                    line.search=FALSE,
                     nlminb.control=list(),
                     warm.start=TRUE,
                     missing="listwise",
@@ -121,7 +151,15 @@ cv_regsem = function(model,
 #  dat.test <- dat[-ids,]
 #}
 fits.var=NA
-pars_pen <- parse_parameters(pars_pen, model)
+
+if(is.null(pars_pen) & type!="none"){
+  stop("for cv_regsem(), pars_pen needs to be specified")
+}
+
+if(is.null(pars_pen)==FALSE & is.numeric(pars_pen)==FALSE){
+  pars_pen <- parse_parameters(pars_pen,model)
+}
+
 
 if(parallel == TRUE){
   stop("parallel is not currently supported")
@@ -137,10 +175,16 @@ count = 0
 counts=n.lambda
 #res2 <- data.frame(matrix(NA,counts,3))
 #coefs = rep(1,14)
+pb <- txtProgressBar(min = 0, max = counts, style = 3)
 
 while(count < counts){
   count = count + 1
-  print(count)
+
+  # create progress bar
+
+    setTxtProgressBar(pb, count)
+
+
   SHRINK <- SHRINK2 + jump*(count-1) # 0.01 works well & 0.007 as well with 150 iterations
 
   if(count > 1 & all(abs(par.matrix[count-1,pars_pen])<.001)){
@@ -187,6 +231,7 @@ if(mult.start==FALSE){
                   alpha.inc=alpha.inc,
                   step=step,
                   max.iter=max.iter,
+                  line.search=line.search,
                   momentum=momentum,
                   step.ratio=step.ratio,
                   nlminb.control=nlminb.control,
@@ -216,6 +261,7 @@ if(mult.start==FALSE){
                   alpha.inc=alpha.inc,
                   step=step,
                   max.iter=max.iter,
+                  line.search=line.search,
                   momentum=momentum,
                   step.ratio=step.ratio,
                   nlminb.control=nlminb.control,
@@ -257,6 +303,7 @@ if(mult.start==FALSE){
                   alpha.inc=alpha.inc,
                   step=step,
                   max.iter=max.iter,
+                  line.search=line.search,
                   momentum=momentum,
                   step.ratio=step.ratio,
                   nlminb.control=nlminb.control,
@@ -297,6 +344,7 @@ if(mult.start==FALSE){
                   alpha.inc=alpha.inc,
                   step=step,
                   max.iter=max.iter,
+                  line.search=line.search,
                   momentum=momentum,
                   step.ratio=step.ratio,
                   nlminb.control=nlminb.control,
@@ -338,6 +386,7 @@ if(mult.start==FALSE){
                      solver.maxit=solver.maxit,
                      alpha.inc=alpha.inc,
                      step=step,
+                     line.search=line.search,
                      max.iter=max.iter,
                      momentum=momentum,
                      step.ratio=step.ratio,
@@ -361,13 +410,13 @@ if(mult.start==FALSE){
 
     if(warm.start==FALSE | count == 1 | count == 99){
       itt = 0
-      Start2=NULL
+      Start2="lavaan"
     }else if(fits[count-1,2] == 0){
       itt = 0
       Start2 = par.matrix[count-1,]
       Start2[pars_pen] = Start2[pars_pen]-step*jump
     }else if(fits[count-1,2] == 99){
-      Start="lavaan"
+      Start2="lavaan"
     }else{
       itt = itt + 1
       Start2 = par.matrix[count-itt-1,]
@@ -391,6 +440,7 @@ if(mult.start==FALSE){
                       full=full,
                       block=block,
                       alpha.inc=alpha.inc,
+                      line.search=line.search,
                       step=step,
                       momentum=momentum,
                       Start2=Start2,
@@ -413,6 +463,7 @@ if(mult.start==FALSE){
                          full=full,
                          block=block,
                          alpha.inc=alpha.inc,
+                         line.search=line.search,
                          step=step,
                          momentum=momentum,
                          Start2=Start2,
@@ -447,6 +498,7 @@ if(mult.start==FALSE){
                            full=full,
                            block=block,
                            alpha.inc=alpha.inc,
+                           line.search=line.search,
                            step=step,
                            momentum=momentum,
                            Start2=Start2,
@@ -481,6 +533,7 @@ if(mult.start==FALSE){
                          block=block,
                          alpha.inc=alpha.inc,
                          step=step,
+                         line.search=line.search,
                          momentum=momentum,
                          Start2=Start2,
                          step.ratio=step.ratio,nlminb.control=nlminb.control,
@@ -516,6 +569,7 @@ if(mult.start==FALSE){
                             block=block,
                             alpha.inc=alpha.inc,
                             step=step,
+                            line.search=line.search,
                             momentum=momentum,
                             Start2=Start2,
                             step.ratio=step.ratio,nlminb.control=nlminb.control,
@@ -579,13 +633,18 @@ if(mult.start==FALSE){
 
   colnames(par.matrix) = names(out$coefficients)
   colnames(fits) <- c("lambda","conv",fit.ret)
-  out2 <- list(par.matrix,fits,pars_pen,fitt.var,fit.reg)
+  fit.index = fits[,metric]
+  conv = fits[,"conv"]
+  loc = which(fit.index==min(fit.index[conv!=99 & is.na(conv)==FALSE]))
+  final_pars = par.matrix[loc,]
+
+  out2 <- list(par.matrix,fits,final_pars,pars_pen,metric) #fitt_var
  # ret
 
 }
 }else if(parallel==TRUE){
 
-  stop("Parallel is not currently recommended")
+  stop("Parallel is not currently supported")
 
   par.matrix <- matrix(0,n.lambda,model@Fit@npar)
   fits <- matrix(NA,n.lambda,length(fit.ret)+2)
@@ -619,6 +678,7 @@ if(mult.start==FALSE){
                     quasi=quasi,
                     solver.maxit=solver.maxit,
                     alpha.inc=alpha.inc,
+                    line.search=line.search,
                     step=step,
                     momentum=momentum,
                     step.ratio=step.ratio,
@@ -638,6 +698,7 @@ if(mult.start==FALSE){
                          solver.maxit=solver.maxit,
                          alpha.inc=alpha.inc,
                          step=step,
+                         line.search=line.search,
                          momentum=momentum,
                          step.ratio=step.ratio,
                          pars_pen=pars_pen,diff_par=NULL,warm.start=warm.start)
@@ -691,6 +752,7 @@ if(mult.start==FALSE){
                      "solver",
                      "quasi",
                      "full",
+                     "line.search",
                      "UB",
                      "calc",
                      "nlminb.control",
@@ -716,10 +778,15 @@ if(mult.start==FALSE){
 
 
 }
+
+
 #fits = fit_indices(out,CV=FALSE)
-out2$pars_pen <- pars_pen
+#out2$pars_pen <- pars_pen
 out2$call <- match.call()
 class(out2) <- "cvregsem"
+names(out2) <- c("parameters","fits","final_pars","pars_pen","metric","call")#"fit_variance"
 out2
+
+#close(pb)
 
 }

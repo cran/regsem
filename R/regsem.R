@@ -1,6 +1,7 @@
 #'
 #'
-#' Regularized Structural Equation Modeling
+#' Regularized Structural Equation Modeling. Tests a single penalty. For
+#' testing multiple penalties, see cv_regsem().
 #'
 #' @param model Lavaan output object. This is a model that was previously
 #'        run with any of the lavaan main functions: cfa(), lavaan(), sem(),
@@ -72,6 +73,7 @@
 #' @param quasi Whether to use quasi-Newton
 #' @param solver.maxit Max iterations for solver in coord_desc
 #' @param alpha.inc Whether alpha should increase for coord_desc
+#' @param line.search Use line search for optimization. Default is no, use fixed step size
 #' @param step Step size
 #' @param momentum Momentum for step sizes
 #' @param step.ratio Ratio of step size between A and S. Logical
@@ -103,26 +105,28 @@
 #' @import lavaan
 #' @importFrom stats cov na.omit nlminb pchisq rnorm runif sd uniroot var weighted.mean cov2cor
 #' @importFrom graphics abline lines plot points
+#' @importFrom utils setTxtProgressBar txtProgressBar
 #' @export
 #' @examples
 #' library(lavaan)
+#' # put variables on same scale for regsem
 #' HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 #' mod <- '
 #' f =~ 1*x1 + l1*x2 + l2*x3 + l3*x4 + l4*x5 + l5*x6 + l6*x7 + l7*x8 + l8*x9
 #' '
 #' # Recommended to specify meanstructure in lavaan
-#' outt = cfa(mod,HS,meanstructure=TRUE)
+#' outt = cfa(mod, HS, meanstructure=TRUE)
 #'
-#' fit1 <- regsem(outt,lambda=0.05,type="lasso",
-#'   pars_pen=c("l1","l2","l6","l7","l8"))
-#' #equivalent to pars_pen=c(1:2,6:8)
+#' fit1 <- regsem(outt, lambda=0.05, type="lasso",
+#'   pars_pen=c("l1", "l2", "l6", "l7", "l8"))
+#' #equivalent to pars_pen=c(1:2, 6:8)
 #' #summary(fit1)
 
 
 
 
 
-regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="none",data=NULL,optMethod="coord_desc",
+regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,optMethod="coord_desc",
                  gradFun="ram",hessFun="none",parallel="no",Start="lavaan",
                  subOpt="nlminb",longMod=F,
                  pars_pen=NULL,
@@ -139,6 +143,7 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="none",data=NULL,optM
                  quasi=FALSE,
                  solver.maxit=5,
                  alpha.inc=FALSE,
+                 line.search=FALSE,
                  step=.1,
                  momentum=FALSE,
                  step.ratio=FALSE,
@@ -146,6 +151,13 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="none",data=NULL,optM
                  missing="listwise"){
 
   e_alpha=alpha
+
+
+
+  if (class(model)!="lavaan") stop("Input is not a 'lavaan' object")
+
+  match.arg(type,c("lasso","none","ridge","scad","alasso","mcp","diff_lasso","enet"))
+
 
   if(type == "scad" | type == "mcp"){
     warning("this type is currently not working well")
@@ -160,7 +172,6 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="none",data=NULL,optM
   # turn parameter labels into numbers
 
   if(is.null(pars_pen)==FALSE & is.numeric(pars_pen)==FALSE){
-    print(parse_parameters(pars_pen,model))
     pars_pen <- parse_parameters(pars_pen,model)
   }
 
@@ -340,7 +351,7 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="none",data=NULL,optM
   F <- mats$F
   I <- diag(nrow(A))
 
-  pars_pen <- parse_parameters(pars_pen, model)
+ # pars_pen <- parse_parameters(pars_pen, model)
 
 
     if(is.null(pars_pen) == TRUE){
@@ -734,16 +745,15 @@ if(optMethod=="nlminb"){
         res$convergence = out$convergence
         par.ret <- out$pars
 
-}else if(optMethod=="rgenoud"){
-  dom = matrix(c(LB,UB),nrow=length(start),2)
-  suppressWarnings(out <- rgenoud::genoud(calc,starting.values=start,Domains=dom,
-                                      nvars=length(start),print.level=0,gr=grad,
-                                      boundary.enforcement=2,
-                                      wait.generations=3))
-  res$out <- out
+}else if(optMethod=="lbfgs"){
+
+  suppressWarnings(out <- lbfgs::lbfgs(calc,grad,start,orthantwise_c =lambda,
+                                       orthantwise_start=0,orthantwise_end=6))
+  print(out)
+  par.ret <- out$par
   res$optim_fit <- out$value
-  res$convergence = 0
-  res$par.ret <- out$par
+  res$convergence = out$convergence
+
 }else if(optMethod=="GA"){
   calc2 = function(start){
     10-calc(start)
@@ -775,7 +785,8 @@ if(optMethod=="nlminb"){
                    alpha.inc=alpha.inc,step=step,momentum=momentum,
                    e_alpha=e_alpha,gamma=gamma,
                    par.lim=par.lim,
-                   step.ratio=step.ratio,diff_par=diff_par,pen_vec=pen_vec,quasi=quasi)
+                   step.ratio=step.ratio,diff_par=diff_par,pen_vec=pen_vec,quasi=quasi,
+                   line.search=line.search,pen_vec_ml)
   res$out <- out
   res$optim_fit <- out$value
   #print(out$convergence)

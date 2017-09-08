@@ -2,26 +2,41 @@
 % Please edit documentation in R/cv_regsem.R
 \name{cv_regsem}
 \alias{cv_regsem}
-\title{The main function that ties together and runs the models.}
+\title{The main function that runs multiple penalty values.}
 \usage{
-cv_regsem(model, n.lambda = 100, pars_pen = NULL, mult.start = FALSE,
-  multi.iter = 10, jump = 0.002, lambda.start = 0, alpha = 0.5,
-  type = "none", fit.ret = c("rmsea", "BIC"), fit.ret2 = "train",
-  n.boot = 20, data = NULL, optMethod = "coord_desc", gradFun = "ram",
-  hessFun = "none", test.cov = NULL, parallel = FALSE, ncore = 2,
-  Start = "lavaan", subOpt = "nlminb", diff_par = NULL, LB = -Inf,
-  UB = Inf, par.lim = c(-Inf, Inf), block = TRUE, full = TRUE,
-  calc = "normal", max.iter = 2000, tol = 1e-05, solver = FALSE,
-  quasi = FALSE, solver.maxit = 5, alpha.inc = FALSE, step = 0.1,
-  momentum = FALSE, step.ratio = FALSE, nlminb.control = list(),
+cv_regsem(model, n.lambda = 100, pars_pen, metric = "BIC",
+  mult.start = FALSE, multi.iter = 10, jump = 0.002, lambda.start = 0,
+  alpha = 0.5, type = "lasso", fit.ret = c("rmsea", "BIC"),
+  fit.ret2 = "train", n.boot = 20, data = NULL,
+  optMethod = "coord_desc", gradFun = "ram", hessFun = "none",
+  test.cov = NULL, parallel = FALSE, ncore = 2, Start = "lavaan",
+  subOpt = "nlminb", diff_par = NULL, LB = -Inf, UB = Inf,
+  par.lim = c(-Inf, Inf), block = TRUE, full = TRUE, calc = "normal",
+  max.iter = 2000, tol = 1e-05, solver = FALSE, quasi = FALSE,
+  solver.maxit = 5, alpha.inc = FALSE, step = 0.1, momentum = FALSE,
+  step.ratio = FALSE, line.search = FALSE, nlminb.control = list(),
   warm.start = TRUE, missing = "listwise", ...)
 }
 \arguments{
-\item{model}{lavaan output object.}
+\item{model}{Lavaan output object. This is a model that was previously
+run with any of the lavaan main functions: cfa(), lavaan(), sem(),
+or growth(). It also can be from the efaUnrotate() function from
+the semTools package. Currently, the parts of the model which cannot
+be handled in regsem is the use of multiple group models, missing
+other than listwise, thresholds from categorical variable models,
+the use of additional estimators other than
+ML, most notably WLSMV for categorical variables. Note: the model
+does not have to actually run (use do.fit=FALSE), converge etc...
+regsem() uses the lavaan object as more of a parser and to get
+sample covariance matrix.}
 
 \item{n.lambda}{number of penalization values to test.}
 
 \item{pars_pen}{parameter indicators to penalize.}
+
+\item{metric}{Which fit index to use to choose a final model?
+Note that it chooses the best fit that also achieves convergence
+(conv=0).}
 
 \item{mult.start}{Logical. Whether to use multi_optim() (TRUE) or
 regsem() (FALSE).}
@@ -103,6 +118,8 @@ for use.}
 
 \item{step.ratio}{Ratio of step size between A and S. Logical}
 
+\item{line.search}{Use line search for optimization. Default is no, use fixed step size}
+
 \item{nlminb.control}{list of control values to pass to nlminb}
 
 \item{warm.start}{Whether start values are based on previous iteration.
@@ -114,18 +131,31 @@ and "fiml".}
 \item{...}{Any additional arguments to pass to regsem() or multi_optim().}
 }
 \description{
-The main function that ties together and runs the models.
+The main function that runs multiple penalty values.
 }
 \examples{
 \dontrun{
-library(lavaan)
+library(regsem)
+# put variables on same scale for regsem
 HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 mod <- '
 f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
 '
+outt = cfa(mod, HS)
+
+cv.out = cv_regsem(outt,type="ridge", pars_pen=c(1:2,6:8), n.lambda=100)
+# check parameter numbers
+extractMatrices(outt)["A"]
+# equivalent to
+mod <- '
+f =~ 1*x1 + l1*x2 + l2*x3 + l3*x4 + l4*x5 + l5*x6 + l6*x7 + l7*x8 + l8*x9
+'
 outt = cfa(mod,HS)
 
-cv.out = cv_regsem(outt,type="ridge",gradFun="none",n.lambda=100)
+cv.out = cv_regsem(outt, type="ridge", pars_pen=c("l1","l2","l6","l7","l8"),
+         n.lambda=100)
+summary(cv.out)
+plot(cv.out, show.minimum="BIC")
 }
 }
 \keyword{calc}
