@@ -4,8 +4,8 @@
 \alias{xmed_cat}
 \title{Function to performed exploratory mediation with categorical variables}
 \usage{
-xmed_cat(data, iv, mediators, dv, type = "lasso", nfolds = 10,
-  epsilon = 0.001, seed = NULL)
+xmed_cat(data, iv, mediators, dv, covariates = NULL, type = "lasso",
+  nfolds = 10, epsilon = 0.001, seed = NULL)
 }
 \arguments{
 \item{data}{Name of the dataset}
@@ -15,6 +15,8 @@ xmed_cat(data, iv, mediators, dv, type = "lasso", nfolds = 10,
 \item{mediators}{Name of mediators}
 
 \item{dv}{Name of dependent variable}
+
+\item{covariates}{Name of covariates to be included in model.}
 
 \item{type}{What type of penalty. Options include lasso, ridge, and enet.}
 
@@ -28,6 +30,7 @@ xmed_cat(data, iv, mediators, dv, type = "lasso", nfolds = 10,
 Function to performed exploratory mediation with categorical variables
 }
 \examples{
+\dontrun{
 # example
 library(ISLR)
 College1 = College[which(College$Private=="Yes"),]
@@ -64,4 +67,5 @@ mediators <- c("Outstate","Room.Board","Books","Expend")
 
 out <- xmed_cat(Data,iv,mediators,dv)
 out
+}
 }

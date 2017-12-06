@@ -1,7 +1,7 @@
 Package: regsem
 Type: Package
 Title: Regularized Structural Equation Modeling
-Version: 0.9.2
+Version: 1.0.6
 Author: Ross Jacobucci[aut,cre], 
         Kevin J. Grimm [ctb], 
         Andreas M. Brandmaier [ctb],
@@ -15,10 +15,10 @@ License: GPL (>= 2)
 LazyData: TRUE
 Depends: lavaan, Rcpp
 Suggests: snowfall, MASS, GA, caret, glmnet, ISLR, lbfgs, Rsolnp,
-        numDeriv, optimx, semPlot, colorspace
+        numDeriv, nloptr, optimx, semPlot, colorspace
 LinkingTo: Rcpp, RcppArmadillo
 RoxygenNote: 6.0.1
 NeedsCompilation: yes
-Packaged: 2017-09-08 12:58:47 UTC; rjacobuc
+Packaged: 2017-12-06 00:22:32 UTC; rjacobuc
 Repository: CRAN
-Date/Publication: 2017-09-08 15:23:06 UTC
+Date/Publication: 2017-12-06 04:37:40 UTC

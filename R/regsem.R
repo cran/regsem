@@ -30,17 +30,22 @@
 #'        "scad", and the minimum concave penalty, "mcp".
 #' @param data Optional dataframe. Only required for missing="fiml" which
 #'        is not currently working.
-#' @param optMethod Solver to use. Recommended options include "nlminb" and
-#'        "optimx". Note: for "optimx", the default method is to use nlminb.
-#'        This can be changed in subOpt.
+#' @param optMethod Solver to use. Two main options for use: rsoolnp and coord_desc.
+#'        Although slightly slower, rsolnp works much better for complex models.
+#'        coord_desc uses gradient descent with soft thresholding for the type of
+#'        of penalty. Rsolnp is a nonlinear solver that doesn't rely on gradient
+#'        information. There is a similar type of solver also available for use,
+#'        slsqp from the nloptr package. coord_desc can also be used with hessian
+#'        information, either through the use of quasi=TRUE, or specifying a hess_fun.
+#'        However, this option is not recommended at this time.
 #' @param gradFun Gradient function to use. Recommended to use "ram",
 #'        which refers to the method specified in von Oertzen & Brick (2014).
-#'        The "norm" procedure uses the forward difference method for
-#'        calculating the hessian. This is slower and less accurate.
+#'        Only for use with optMethod="coord_desc".
 #' @param hessFun Hessian function to use. Recommended to use "ram",
 #'        which refers to the method specified in von Oertzen & Brick (2014).
-#'        The "norm" procedure uses the forward difference method for
-#'        calculating the hessian. This is slower and less accurate.
+#'        This is currently not recommended.
+#' @param prerun Logical. Use rsolnp to first optimize before passing to
+#'        gradient descent? Only for use with coord_desc.
 #' @param parallel Logical. Whether to parallelize the processes?
 #' @param Start type of starting values to use. Only recommended to use
 #'        "default". This sets factor loadings and variances to 0.5.
@@ -108,6 +113,7 @@
 #' @importFrom utils setTxtProgressBar txtProgressBar
 #' @export
 #' @examples
+#' # Note that this is not currently recommended. Use cv_regsem() instead
 #' library(lavaan)
 #' # put variables on same scale for regsem
 #' HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
@@ -126,8 +132,8 @@
 
 
 
-regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,optMethod="coord_desc",
-                 gradFun="ram",hessFun="none",parallel="no",Start="lavaan",
+regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,optMethod="rsolnp",
+                 gradFun="ram",hessFun="none",prerun=FALSE,parallel="no",Start="lavaan",
                  subOpt="nlminb",longMod=F,
                  pars_pen=NULL,
                  diff_par=NULL,
@@ -152,6 +158,9 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,opt
 
   e_alpha=alpha
 
+  if(quasi==TRUE){
+    warnings("The quasi-Newton method is currently not recommended")
+  }
 
 
   if (class(model)!="lavaan") stop("Input is not a 'lavaan' object")
@@ -563,7 +572,6 @@ stop("gradFun = auto is not supported at this time")
 }
 
     res <- list()
-
 if(optMethod=="nlminb"){
     if(gradFun=="norm"){
       if(hessFun=="norm"){
@@ -737,13 +745,29 @@ if(optMethod=="nlminb"){
 }else if(optMethod=="rsolnp"){
        # if(UB == Inf) UB=NULL
        # if(LB == -Inf) LB=NULL
-        suppressWarnings(out <- Rsolnp::solnp(start,calc,LB=LB,UB=UB,
-                                              control=list(trace=0,tol=1e-16)))#tol=1e-16
+
+        suppressWarnings(out <- Rsolnp::solnp(start,calc,#LB=LB,UB=UB,
+                                              control=list(trace=0)))#tol=1e-16
         #out <- optim(par=start,fn=calc,gr=grad)
         res$out <- out
         #res$iterations <- out$nfunevals
-        res$convergence = out$convergence
+        res$optim_fit <- out$values[length(out$values)]
+
+        if(abs(res$optim_fit)>100){
+          res$convergence=1
+        }else{
+          res$convergence = out$convergence
+        }
+
         par.ret <- out$pars
+
+}else if(optMethod=="slsqp"){
+
+  out <- nloptr::slsqp(start,calc)
+
+    par.ret <- out$par
+   res$optim_fit <- out$value
+   res$convergence = ifelse(out$convergence>1,0,1)
 
 }else if(optMethod=="lbfgs"){
 
@@ -767,7 +791,6 @@ if(optMethod=="nlminb"){
   res$par.ret <- summary(out)$solution
 }else if(optMethod=="coord_desc"){
 
-
   if(type=="alasso"){
     mult = rcpp_RAMmult(par=start,A,S,S_fixed,A_fixed,A_est,S_est,F,I)
     pen_vec = c(mult$A_est22[match(pars_pen,A,nomatch=0)],mult$S_est22[match(pars_pen,S,nomatch=0)])
@@ -778,7 +801,7 @@ if(optMethod=="nlminb"){
 
 
   out = coord_desc(start=start,func=calc,type=type,grad=grad,
-                   hess=hess,hessFun=hessFun,
+                   hess=hess,hessFun=hessFun,prerun=prerun,
                    pars_pen=pars_pen,model=model,max.iter=max.iter,
                    lambda=lambda,mats=mats,block=block,tol=tol,full=full,
                    solver=solver,solver.maxit=solver.maxit,
@@ -1096,8 +1119,7 @@ if(optMethod=="nlminb"){
     res$lav.model <- model
 
     if(res$convergence != 0){
-      warning("WARNING: Model did not converge! It is recommended to try multi_optim() or
-              change step.ratio=TRUE")
+      warning("WARNING: Model did not converge! It is recommended to try multi_optim()")
     }
 
     res$call <- match.call()

@@ -7,6 +7,7 @@
 #' @param col A specification for the default plotting color.
 #' @param type what type of plot should be drawn. Possible types are "p" for points, "l" for lines, or "b" for both
 #' @param lwd line width
+#' @param h_line Where to draw horizontal line
 #' @param lty line type
 #' @param xlab X axis label
 #' @param ylab Y axis label
@@ -16,7 +17,7 @@
 
 
 plot.cvregsem <- function (x, ..., pars = NULL, show.minimum="BIC",
-                              col = NULL, type = "l", lwd = 3,
+                              col = NULL, type = "l", lwd = 3,h_line=0,
                               lty = 1, xlab = NULL, ylab = NULL)
 {
   if (is.null(pars))
@@ -40,7 +41,11 @@ plot.cvregsem <- function (x, ..., pars = NULL, show.minimum="BIC",
   }
 
   # filter NA values in fit function
-  ydat <- coef.mat[, 1]
+ if(is.null(dim(coef.mat))){
+   ydat <- coef.mat
+ }else{
+   ydat <- coef.mat[, 1]
+ }
   xdat <- x$fits[, "lambda"]
   rm.ids <- which(x$fits[,"conv"] != 0)
   if (length(rm.ids)>0) {
@@ -52,18 +57,32 @@ plot.cvregsem <- function (x, ..., pars = NULL, show.minimum="BIC",
   # adjust plot limits relative to scale not by absolute increment
   plot(xdat, ydat, ylim = c(min(coef.mat) * 0.95, max(coef.mat) * 1.05), ylab = ylab, xlab = xlab,
        type = "n")
-  for (i in 1:(ncol(coef.mat))) {
-    if (type == "l" || type == "b")
-      lines(xdat, coef.mat[, i], lty = lty,
-            col = colls[i], lwd = lwd)
-    if (type == "p" || type == "b")
-      points(xdat, coef.mat[, i])
+
+  if(is.null(dim(coef.mat))){
+
+      if (type == "l" || type == "b")
+        lines(xdat, coef.mat, lty = lty,
+              col = colls, lwd = lwd)
+      if (type == "p" || type == "b")
+        points(xdat, coef.mat)
+
+  }else{
+    for (i in 1:(ncol(coef.mat))) {
+      if (type == "l" || type == "b")
+        lines(xdat, coef.mat[, i], lty = lty,
+              col = colls[i], lwd = lwd)
+      if (type == "p" || type == "b")
+        points(xdat, coef.mat[, i])
+    }
   }
-  abline(a = 0, b = 0)
+
+
+
+  abline(a=h_line,b=0)
 
   # add minimum
   if (!is.null(show.minimum)) {
-    min.id <- which.min(x$fits[,show.minimum])
+    min.id <- which.min(abs(x$fits[,show.minimum]))
     lambda <- x$fits[min.id,1]
 
     abline(v=lambda,lty=2)

@@ -23,7 +23,7 @@
 #' @param multi.iter maximum number of random starts for multi_optim
 #' @param jump Amount to increase penalization each iteration.
 #' @param lambda.start What value to start the penalty at
-#' @param alpha Mixing for elastic net
+#' @param alpha Mixture for elastic net. 1 = ridge, 0 = lasso
 #' @param type Penalty type. Options include "none", "lasso", "ridge",
 #'        "enet" for the elastic net,
 #'        "alasso" for the adaptive lasso
@@ -37,10 +37,21 @@
 #'        do 2 sample CV manually.
 #' @param n.boot Number of bootstrap samples if fit.ret2="boot"
 #' @param data Optional dataframe. Only required for missing="fiml".
-#' @param optMethod solver to use.
-#' @param gradFun gradient function to use.
-#' @param hessFun hessian function to use.
+#' @param optMethod Solver to use. Two main options for use: rsoolnp and coord_desc.
+#'        Although slightly slower, rsolnp works much better for complex models.
+#'        coord_desc uses gradient descent with soft thresholding for the type of
+#'        of penalty. Rsolnp is a nonlinear solver that doesn't rely on gradient
+#'        information. There is a similar type of solver also available for use,
+#'        slsqp from the nloptr package. coord_desc can also be used with hessian
+#'        information, either through the use of quasi=TRUE, or specifying a hess_fun.
+#'        However, this option is not recommended at this time.
+#' @param gradFun Gradient function to use. Recommended to use "ram",
+#'        which refers to the method specified in von Oertzen & Brick (2014).
+#'        Only for use with optMethod="coord_desc".
+#' @param hessFun hessian function to use. Currently not recommended.
 #' @param test.cov Covariance matrix from test dataset. Necessary for CV=T
+#' @param prerun Logical. Use rsolnp to first optimize before passing to
+#'        gradient descent? Only for use with coord_desc
 #' @param parallel Logical. whether to parallelize the processes running models for all
 #'        values of lambda.
 #' @param ncore Number of cores to use when parallel=TRUE
@@ -82,8 +93,9 @@
 #' f =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
 #' '
 #' outt = cfa(mod, HS)
-#'
-#' cv.out = cv_regsem(outt,type="ridge", pars_pen=c(1:2,6:8), n.lambda=100)
+#' # increase to > 25
+#' cv.out = cv_regsem(outt,type="lasso", pars_pen=c(1:2,6:8),
+#'           n.lambda=5,jump=0.01)
 #' # check parameter numbers
 #' extractMatrices(outt)["A"]
 #' # equivalent to
@@ -91,9 +103,9 @@
 #' f =~ 1*x1 + l1*x2 + l2*x3 + l3*x4 + l4*x5 + l5*x6 + l6*x7 + l7*x8 + l8*x9
 #' '
 #' outt = cfa(mod,HS)
-#'
-#' cv.out = cv_regsem(outt, type="ridge", pars_pen=c("l1","l2","l6","l7","l8"),
-#'          n.lambda=100)
+#' # increase to > 25
+#' cv.out = cv_regsem(outt, type="lasso", pars_pen=c("l1","l2","l6","l7","l8"),
+#'          n.lambda=5,jump=0.01)
 #' summary(cv.out)
 #' plot(cv.out, show.minimum="BIC")
 #' }
@@ -114,10 +126,11 @@ cv_regsem = function(model,
                      fit.ret2 = "train",
                      n.boot=20,
                      data=NULL,
-                     optMethod="coord_desc",
+                     optMethod="rsolnp",
                     gradFun="ram",
                     hessFun="none",
                     test.cov=NULL,
+                    prerun=FALSE,
                     parallel=FALSE,
                     ncore=2,
                     Start="lavaan",
@@ -140,7 +153,7 @@ cv_regsem = function(model,
                     step.ratio=FALSE,
                     line.search=FALSE,
                     nlminb.control=list(),
-                    warm.start=TRUE,
+                    warm.start=FALSE,
                     missing="listwise",
                     ...){
 
@@ -151,6 +164,7 @@ cv_regsem = function(model,
 #  dat.test <- dat[-ids,]
 #}
 fits.var=NA
+mats <- extractMatrices(model)
 
 if(is.null(pars_pen) & type!="none"){
   stop("for cv_regsem(), pars_pen needs to be specified")
@@ -159,7 +173,9 @@ if(is.null(pars_pen) & type!="none"){
 if(is.null(pars_pen)==FALSE & is.numeric(pars_pen)==FALSE){
   pars_pen <- parse_parameters(pars_pen,model)
 }
-
+if(quasi==TRUE){
+  warnings("The quasi-Newton method is currently not recommended")
+}
 
 if(parallel == TRUE){
   stop("parallel is not currently supported")
@@ -220,6 +236,7 @@ if(mult.start==FALSE){
                   diff_par=diff_par,
                   LB=LB,
                   UB=UB,
+                  prerun=prerun,
                   par.lim=par.lim,
                   block=block,
                   full=full,
@@ -248,7 +265,7 @@ if(mult.start==FALSE){
                   alpha=alpha,
                   pars_pen=pars_pen,
                   diff_par=diff_par,
-                  LB=LB,
+                  LB=LB,prerun=prerun,
                   UB=UB,
                   par.lim=par.lim,
                   block=block,
@@ -287,7 +304,7 @@ if(mult.start==FALSE){
                   gradFun=gradFun,hessFun=hessFun,
                   parallel=parallel,Start=Start,
                   subOpt=subOpt,
-                  alpha=alpha,
+                  alpha=alpha,prerun=prerun,
                   pars_pen=pars_pen,
                   diff_par=diff_par,
                   LB=LB,
@@ -310,7 +327,29 @@ if(mult.start==FALSE){
                   missing=missing)
 
     if(out$convergence==0){
-      fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=cov(test))$fits[fit.ret]
+
+
+      if(mats$mean == TRUE){
+        mm = mats$A[,"1"]
+
+        SampMean <- colMeans(test)
+        ss = match(names(mm[mm > 0]),model@Data@ov$name)
+        SampMean[-c(ss)] = 0
+
+        SampCov=cov(test)
+        SampCov2 <- SampCov + SampMean%*%t(SampMean)
+
+        # try changing size of SampCov
+        SampCov3 = cbind(SampCov2,SampMean)
+        SampCov = rbind(SampCov3,append(SampMean,1))
+
+      }else if(mats$mean == FALSE){
+        # SampCov <- model@SampleStats@cov[][[1]]
+        SampMean = NULL
+        SampCov=cov(test)
+      }
+
+      fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov)$fits[fit.ret]
 
     }else{
       fitt[i,] = NA
@@ -332,7 +371,7 @@ if(mult.start==FALSE){
                   pars_pen=pars_pen,
                   diff_par=diff_par,
                   LB=LB,
-                  UB=UB,
+                  UB=UB,prerun=prerun,
                   par.lim=par.lim,
                   block=block,
                   full=full,
@@ -377,7 +416,7 @@ if(mult.start==FALSE){
                      LB=LB,
                      UB=UB,
                      par.lim=par.lim,
-                     block=block,
+                     block=block,prerun=prerun,
                      full=full,
                      calc=calc,
                      tol=tol,
@@ -394,7 +433,30 @@ if(mult.start==FALSE){
                      missing=missing)
 
       if(out$convergence==0){
-        fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=cov(test))$fits[fit.ret]
+
+
+        if(mats$mean == TRUE){
+          mm = mats$A[,"1"]
+
+          SampMean <- colMeans(test)
+          ss = match(names(mm[mm > 0]),model@Data@ov$name)
+          SampMean[-c(ss)] = 0
+
+          SampCov=cov(test)
+          SampCov2 <- SampCov + SampMean%*%t(SampMean)
+
+          # try changing size of SampCov
+          SampCov3 = cbind(SampCov2,SampMean)
+          SampCov = rbind(SampCov3,append(SampMean,1))
+
+        }else if(mats$mean == FALSE){
+          # SampCov <- model@SampleStats@cov[][[1]]
+          SampMean = NULL
+          SampCov=cov(test)
+        }
+
+        fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov)$fits[fit.ret]
+
       }else{
         fitt[i,] = NA
       }
@@ -437,7 +499,7 @@ if(mult.start==FALSE){
                       quasi=quasi,
                       solver.maxit=solver.maxit,
                       max.iter=max.iter,
-                      full=full,
+                      full=full,prerun=prerun,
                       block=block,
                       alpha.inc=alpha.inc,
                       line.search=line.search,
@@ -456,7 +518,7 @@ if(mult.start==FALSE){
                          gradFun=gradFun,hessFun=hessFun,
                          tol=tol,
                          alpha=alpha,
-                         solver=solver,
+                         solver=solver,prerun=prerun,
                          quasi=quasi,
                          solver.maxit=solver.maxit,
                          max.iter=max.iter,
@@ -490,7 +552,7 @@ if(mult.start==FALSE){
                            type=type,optMethod=optMethod,
                            gradFun=gradFun,hessFun=hessFun,
                            tol=tol,
-                           alpha=alpha,
+                           alpha=alpha,prerun=prerun,
                            solver=solver,
                            quasi=quasi,
                            solver.maxit=solver.maxit,
@@ -507,7 +569,30 @@ if(mult.start==FALSE){
 
 
         if(out$convergence==0){
-          fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=cov(test))$fits[fit.ret]
+
+
+          if(mats$mean == TRUE){
+            mm = mats$A[,"1"]
+
+            SampMean <- colMeans(test)
+            ss = match(names(mm[mm > 0]),model@Data@ov$name)
+            SampMean[-c(ss)] = 0
+
+            SampCov=cov(test)
+            SampCov2 <- SampCov + SampMean%*%t(SampMean)
+
+            # try changing size of SampCov
+            SampCov3 = cbind(SampCov2,SampMean)
+            SampCov = rbind(SampCov3,append(SampMean,1))
+
+          }else if(mats$mean == FALSE){
+            # SampCov <- model@SampleStats@cov[][[1]]
+            SampMean = NULL
+            SampCov=cov(test)
+          }
+
+          fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov)$fits[fit.ret]
+
         }else{
           fitt[i,] = NA
         }
@@ -526,7 +611,7 @@ if(mult.start==FALSE){
                          tol=tol,
                          alpha=alpha,
                          solver=solver,
-                         quasi=quasi,
+                         quasi=quasi,prerun=prerun,
                          solver.maxit=solver.maxit,
                          max.iter=max.iter,
                          full=full,
@@ -560,7 +645,7 @@ if(mult.start==FALSE){
                             type=type,optMethod=optMethod,
                             gradFun=gradFun,hessFun=hessFun,
                             tol=tol,
-                            alpha=alpha,
+                            alpha=alpha,prerun=prerun,
                             solver=solver,
                             quasi=quasi,
                             solver.maxit=solver.maxit,
@@ -576,7 +661,30 @@ if(mult.start==FALSE){
                             pars_pen=pars_pen,diff_par=NULL)
 
         if(out$convergence==0){
-          fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=cov(test))$fits[fit.ret]
+
+
+          if(mats$mean == TRUE){
+            mm = mats$A[,"1"]
+
+            SampMean <- colMeans(test)
+            ss = match(names(mm[mm > 0]),model@Data@ov$name)
+            SampMean[-c(ss)] = 0
+
+            SampCov=cov(test)
+            SampCov2 <- SampCov + SampMean%*%t(SampMean)
+
+            # try changing size of SampCov
+            SampCov3 = cbind(SampCov2,SampMean)
+            SampCov = rbind(SampCov3,append(SampMean,1))
+
+          }else if(mats$mean == FALSE){
+            # SampCov <- model@SampleStats@cov[][[1]]
+            SampMean = NULL
+            SampCov=cov(test)
+          }
+
+          fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov)$fits[fit.ret]
+
         }else{
           fitt[i,] = NA
         }
@@ -635,7 +743,12 @@ if(mult.start==FALSE){
   colnames(fits) <- c("lambda","conv",fit.ret)
   fit.index = fits[,metric]
   conv = fits[,"conv"]
-  loc = which(fit.index==min(fit.index[conv!=99 & is.na(conv)==FALSE]))
+  if(metric=="TLI" | metric=="CFI"){
+    loc = which(abs(fit.index)==max(abs(fit.index[conv==0 & is.nan(fit.index) == FALSE & is.na(conv)==FALSE])))
+  }else{
+    loc = which(abs(fit.index)==min(abs(fit.index[conv==0 & is.nan(fit.index) == FALSE & is.na(conv)==FALSE])))
+  }
+
   final_pars = par.matrix[loc,]
 
   out2 <- list(par.matrix,fits,final_pars,pars_pen,metric) #fitt_var
@@ -668,7 +781,7 @@ if(mult.start==FALSE){
                     diff_par=diff_par,
                     LB=LB,
                     alpha=alpha,
-                    UB=UB,
+                    UB=UB,prerun=prerun,
                     calc=calc,
                     nlminb.control=nlminb.control,
                     tol=tol,
@@ -692,7 +805,7 @@ if(mult.start==FALSE){
                          tol=tol,
                          full=full,
                          alpha=alpha,
-                         block=block,
+                         block=block,prerun=prerun,
                          solver=solver,
                          quasi=quasi,
                          solver.maxit=solver.maxit,

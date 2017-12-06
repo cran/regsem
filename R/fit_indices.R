@@ -2,11 +2,14 @@
 #'
 #' Calculates the fit indices
 #' @param model regsem model object.
-#' @param CV cross-validation.
+#' @param CV cross-validation. Note that this requires splitting the dataset
+#'           into a training and test set prior to running the model. The
+#'           model should be run on the training set, with the test set
+#'           held out and then passed to CovMat=.
 #' @param CovMat If CV=T then test covariance matrix must be supplied. Note
-#'        That this should be done before running the lavaan model.
+#'        That this should be done before running the lavaan model and should
+#'        not overlap with the data or covariance matrix used to run the model.
 #' @param data supply the dataset?
-#' @param n.boot number of bootstrap samples to take.
 #' @keywords fit chisq ncp rmsea
 #' @export
 #' @examples
@@ -15,12 +18,12 @@
 #' }
 
 
-fit_indices =  function(model,CV=F,CovMat=NULL,data=NULL,n.boot=100){
+fit_indices =  function(model,CV=F,CovMat=NULL,data=NULL){
 
   res <- list()
-  ret <- as.vector(rep(0,25))
+  ret <- as.vector(rep(0,24))
 
-  names(ret) <- c("Fmin","varFit","p","chisq","p.chisq","nfac","df","npar","N","baseline.chisq","baseline.df",
+  names(ret) <- c("Fmin","p","chisq","p.chisq","nfac","df","npar","N","baseline.chisq","baseline.df",
                   "logl","ncp","rmsea","rmsea.lower","rmsea.upper","rmsea.pval","srmr",
                   "CFI","TLI","BIC","AIC",
                   "CAIC","EBIC.5","EBIC.25")
@@ -70,44 +73,45 @@ fit_indices =  function(model,CV=F,CovMat=NULL,data=NULL,n.boot=100){
 
    # SampCov=CovMat
     fit = 0.5*(log(det(ImpCov)) + trace(SampCov %*% solve(ImpCov)) - log(det(SampCov))  - p)
-  }else if(CV=="boot"){
-    fit.rep <- rep(NA,n.boot)
-    ImpCov = model$Imp_Cov
-    SampCov = model$SampCov
-    data <- model$data
+  }#else if(CV=="boot"){
+   # fit.rep <- rep(NA,n.boot)
+   # ImpCov = model$Imp_Cov
+   # SampCov = model$SampCov
+   # data <- model$data
     #data = model@Data@X[[1]]
-      for(i in 1:n.boot){
+   #   for(i in 1:n.boot){
 
-        ids <- sample(nrow(data),nrow(data),replace=TRUE)
-        new.dat <- data[ids,]
-        SampCov.boot <- cov(new.dat)
-        fit.rep[i] = 0.5*(log(det(ImpCov)) + trace(SampCov.boot %*% solve(ImpCov)) - log(det(SampCov.boot))  - p)
+   #     ids <- sample(nrow(data),nrow(data),replace=TRUE)
+   #     new.dat <- data[ids,]
+   #     SampCov.boot <- cov(new.dat)
+   #     fit.rep[i] = 0.5*(log(det(ImpCov)) + trace(SampCov.boot %*% solve(ImpCov)) - log(det(SampCov.boot))  - p)
 
-      }
-    fit = mean(fit.rep)
-    varFit = var(fit.rep)
-  }
+   #   }
+   # fit = mean(fit.rep)
+   # varFit = var(fit.rep)
+ # }
 
 
 
   ret["Fmin"] = fit
 
-  if(CV=="boot"){
-    ret["varFit"] = varFit
-  }else{
-    ret["varFit"] = 0
-  }
+ # if(CV=="boot"){
+ #   ret["varFit"] = varFit
+ # }else{
+ #   ret["varFit"] = 0
+ # }
 
   chisq = fit*N*2
   ret["chisq"] = chisq
 
-  lav.fits <- fitmeasures(model$lav.model)
+
 
 
   if(model$lav.model@Fit@converged == FALSE){
     baseline.chisq = NA
     baseline.df = NA
   }else{
+    lav.fits <- fitmeasures(model$lav.model)
     baseline.chisq = lav.fits["baseline.chisq"]
     baseline.df = lav.fits["baseline.df"]
   }

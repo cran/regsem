@@ -35,25 +35,28 @@
 #'        to take the deviation from are specified in diff_par. Two methods for
 #'        sparser results than lasso are the smooth clipped absolute deviation,
 #'        "scad", and the minimum concave penalty, "mcp".
-#' @param optMethod Solver to use. Recommended options include "nlminb" and
-#'        "optimx". Note: for "optimx", the default method is to use nlminb.
-#'        This can be changed in subOpt.
+#' @param optMethod Solver to use. Two main options for use: rsoolnp and coord_desc.
+#'        Although slightly slower, rsolnp works much better for complex models.
+#'        coord_desc uses gradient descent with soft thresholding for the type of
+#'        of penalty. Rsolnp is a nonlinear solver that doesn't rely on gradient
+#'        information. There is a similar type of solver also available for use,
+#'        slsqp from the nloptr package. coord_desc can also be used with hessian
+#'        information, either through the use of quasi=TRUE, or specifying a hess_fun.
+#'        However, this option is not recommended at this time.
 #' @param gradFun Gradient function to use. Recommended to use "ram",
 #'        which refers to the method specified in von Oertzen & Brick (2014).
-#'        The "norm" procedure uses the forward difference method for
-#'        calculating the hessian. This is slower and less accurate.
+#'        Only for use with optMethod="coord_desc".
 #' @param pars_pen Parameter indicators to penalize. If left NULL, by default,
 #'        all parameters in the \emph{A} matrix outside of the intercepts are
 #'        penalized when lambda > 0 and type != "none".
 #' @param diff_par Parameter values to deviate from. Only used when
 #'        type="diff_lasso".
-#' @param hessFun Hessian function to use. Recommended to use "ram",
-#'        which refers to the method specified in von Oertzen & Brick (2014).
-#'        The "norm" procedure uses the forward difference method for
-#'        calculating the hessian. This is slower and less accurate.
+#' @param hessFun Hessian function to use. Currently not recommended.
+#' @param prerun Logical. Use rsolnp to first optimize before passing to
+#'        gradient descent? Only for use with coord_desc.
 #' @param tol Tolerance for coordinate descent
 #' @param solver Whether to use solver for coord_desc
-#' @param quasi Whether to use quasi-Newton
+#' @param quasi Whether to use quasi-Newton. Currently not recommended.
 #' @param solver.maxit Max iterations for solver in coord_desc
 #' @param alpha.inc Whether alpha should increase for coord_desc
 #' @param line.search Use line search for optimization. Default is no, use fixed step size
@@ -70,7 +73,7 @@
 #' @export
 #' @examples
 #' \dontrun{
-#' # Note that this is not currently recommend. Use regsem() instead
+#' # Note that this is not currently recommended. Use cv_regsem() instead
 #' library(regsem)
 #' # put variables on same scale for regsem
 #' HS <- data.frame(scale(HolzingerSwineford1939[ ,7:15]))
@@ -80,8 +83,7 @@
 #' outt = cfa(mod, HS, meanstructure=TRUE)
 #'
 #' fit1 <- multi_optim(outt, max.try=40,
-#'                    lambda=0.1, type="lasso",
-#'                    gradFun="ram")
+#'                    lambda=0.1, type="lasso")
 #'
 #'
 #'# growth model
@@ -91,7 +93,7 @@
 #'summary(fit)
 #'fitmeasures(fit)
 
-#'fit3 <- multi_optim(fit, lambda=0.2, type="lasso", gradFun="none")
+#'fit3 <- multi_optim(fit, lambda=0.2, type="lasso")
 #'summary(fit3)
 #'}
 
@@ -104,7 +106,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                         block=TRUE,
                         full=TRUE,
                         type="lasso",
-                        optMethod="coord_desc",
+                        optMethod="rsolnp",
                         gradFun="ram",
                         pars_pen=NULL,
                         diff_par=NULL,
@@ -115,6 +117,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                         solver.maxit=50000,
                         alpha.inc=FALSE,
                         line.search=FALSE,
+                        prerun=FALSE,
                         step=.1,
                         momentum=FALSE,
                         step.ratio=FALSE,
@@ -149,7 +152,9 @@ multi_optim <- function(model,max.try=10,lambda=0,
     type="enet";alpha=1
   }
 
-
+  if(quasi==TRUE){
+    warnings("The quasi-Newton method is currently not recommended")
+  }
 #if(warm.start==TRUE){
 #  stop("warm start not currently functioning")
 #}
@@ -185,7 +190,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                          solver.maxit,
                          alpha.inc,
                          step,
-                         momentum,
+                         momentum,prerun,
                          max.iter,
                          line.search,
                          step.ratio,
@@ -229,7 +234,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                                             quasi=quasi,
                                             block=block,
                                             par.lim=par.lim,
-                                            full=full,
+                                            full=full,prerun=prerun,
                                             solver.maxit=solver.maxit,
                                             alpha.inc=alpha.inc,
                                             max.iter=max.iter,
@@ -262,8 +267,8 @@ multi_optim <- function(model,max.try=10,lambda=0,
             mtt[n.optim,2] = fit1$out$convergence
           }else{
             #print(fit1$out$value)
-            mtt[n.optim,1] = fit1$out$value
-            mtt[n.optim,2] = fit1$out$convergence
+            mtt[n.optim,1] = fit1$optim_fit
+            mtt[n.optim,2] = fit1$convergence
           }
         }
     }
@@ -284,7 +289,7 @@ iter.optim = iter.optim + 1
                         quasi=quasi,
                         block=block,
                         par.lim=par.lim,
-                        full=full,
+                        full=full,prerun=prerun,
                         solver.maxit=solver.maxit,
                         max.iter=max.iter,
                         alpha.inc=alpha.inc,
@@ -348,7 +353,7 @@ iter.optim = iter.optim + 1
                      quasi=quasi,
                      block=block,
                      full=full,
-                     par.lim=par.lim,
+                     par.lim=par.lim,prerun=prerun,
                      max.iter=max.iter,
                      solver.maxit=solver.maxit,
                      alpha.inc=alpha.inc,

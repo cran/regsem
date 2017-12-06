@@ -2,7 +2,7 @@
 coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,mats,
                        block,max.iter,tol,full,solver,solver.maxit,alpha.inc,step,
                        step.ratio,diff_par,pen_vec,e_alpha,gamma,momentum,par.lim,quasi,
-                       line.search,pen_vec_ml){
+                       line.search,pen_vec_ml,prerun){
   count = 0
   ret <- list()
   max.iter = max.iter
@@ -10,6 +10,14 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
   #solver=TRUE
   phi_func <- rep(1,max.iter)
   phi_grad <- rep(1,max.iter)
+
+
+
+
+
+  ## remove !!!!!!!!!!!!!!
+
+  # !!!!!!!!!!!!!!!!!!
 
 
  # if(type=="enet"){
@@ -36,6 +44,31 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
  # B <- matrix(NA,2,2)
   new.pars[1,] <- start
  # print(new.pars[1,])
+
+
+
+
+  if(prerun==TRUE){
+
+     out <- try(Rsolnp::solnp(start,func,control=list(trace=0)),silent=TRUE)
+     if(inherits(out, "try-error")){
+       out.solution <- start
+     }else{
+       out.solution <- out$pars
+      # print(func(out.solution))
+     }
+
+
+
+   # out <- hydroPSO::hydroPSO(start,fn=func,lower=start-5,upper=start+5,
+   #                           control=list(verbose=FALSE,write2disk=FALSE))
+   # out.solution <- out$par
+  }
+
+
+
+
+
 
   while(count < max.iter){
     count=count+1
@@ -64,22 +97,9 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
       #s.pars <- update.pars[min(mats$S != 0):max(mats$S)]
     # gg <- grad(new.pars[count,])
 
-    if(solver==FALSE){
-      if(block == FALSE){
-        for(j in 1:length(update.pars)){ # update A
+    if(solver==FALSE & prerun==FALSE){
 
-          gg <- grad(update.pars)
-          nn.par <- update.pars[j] - alpha*gg[j]
-
-          if(any(j == pars_pen) & type=="lasso" & lambda > 0){
-              update.pars[j] <- sign(nn.par)*max(abs(nn.par)-lambda,0)
-          }else{
-              update.pars[j] <- nn.par
-          }
-        }
-      }else if(block==TRUE){
-
-        if(full==TRUE & quasi == FALSE){
+        if(full==TRUE & quasi == FALSE & hessFun=="none"){
 
           #print(round(new.pars[count,],3))
           gg <- try(grad(new.pars[count,]),silent=TRUE)
@@ -119,7 +139,6 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
               func(update.pars)
           } #end delta
 
-
           if(line.search==TRUE){
             c=.5
             p=cbind(rep(0.5,length(new.pars[count,])))#update.pars-new.pars[count,]
@@ -141,7 +160,6 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
 
           # works well with momentum -- delta{only contains func(update.pars)}
          #alpha <- optimize(delta,interval=c(0,step),maximum=FALSE)$minimum
-
 
 
 
@@ -223,7 +241,6 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
           alpha = 1
           update.pars <- new.pars[count,] + alpha*dir
 
-
           # print(out$objective)
           #update.pars <- out$par# - new.pars[count,]) + new.pars[count,]
 
@@ -268,11 +285,12 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
                 1*sum(abs(pars[pars_pen]))
               }else if(type=="alasso"){
                 sum(abs(pars[pars_pen])*abs(1/pen_vec_ml))
+              }else if(type=="diff_lasso"){
+                sum(abs(pars[pars_pen] - pen_diff))
               }else{
                 stop("quasi is currently not supported for that type of penalty")
               }
             }
-
 
             if(line.search==FALSE){
               alpha=step
@@ -316,9 +334,8 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
               }
             }
 
-
 #alpha = .2
-            print(alpha)
+
           update.pars <- new.pars[count,] + alpha*(update.pars-new.pars[count,])
 
 
@@ -418,13 +435,13 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
           update.pars[min(mats$S[mats$S !=0]):max(mats$S)] <-
             update.pars[min(mats$S[mats$S !=0]):max(mats$S)] - s*gg2[min(mats$S[mats$S !=0]):max(mats$S)]
         }
-      }
-    }else if(hessFun!="none" & solver==FALSE){
+    }else if(hessFun!="none" & solver==TRUE & prerun==FALSE){
       #alpha <- .1 + .01*count
      # alpha <- 1
       #print(new.pars[count,])
 
       # A
+
       gg <- grad(new.pars[count,])
       hh <- hess(new.pars[count,])
       #print(round(solve(hh)%*%gg,3))
@@ -442,9 +459,6 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
        cc=0
        for(j in pars_pen){
          cc <- cc + 1
-         #print(update.pars[j])
-         #print(pen_diff[j])
-         #print(soft(pen_diff[j],lambda,type="lasso",step=alpha1,e_alpha,gamma))
          update.pars[j] <- update.pars[j] -
            pen_diff[cc] - soft(pen_diff[cc],lambda,type="lasso",step=alpha,e_alpha,gamma)
        }
@@ -470,7 +484,7 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
      # print(max(mats$S))
 
 
-    }else if(solver==TRUE){
+    }else if(solver==TRUE & hessFun=="none" & prerun==FALSE){
 
       out <- nlminb(new.pars[count,],func,grad,control=list(iter.max=1,step.min=alpha,step.max=alpha))
       #out <- lbfgs::lbfgs(func,grad,new.pars[count,],invisible=1)
@@ -503,6 +517,52 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
       }
 
       # S
+
+
+
+    }else if(prerun==TRUE){
+
+#print(out.solution)
+     # calc2 = function(start){
+      #  10-calc(start)
+     # }
+      #out = GA::ga("real-valued", fitness = func,min=0,max=1000, nBits = length(start),maxiter=30)
+
+
+      gg <- try(grad(out.solution),silent=TRUE)
+      #print(round(gg,2))
+      if(inherits(gg, "try-error")) {
+        gg <- rnorm(length(new.pars[count,]),0,.01)
+      }else{
+        gg <- gg
+      }
+
+
+
+
+
+      update.pars <- out.solution - alpha*gg
+
+      # print(round(t(alpha*gg),3))
+      if(type == "ridge" | type=="none"){
+        update.pars <- update.pars
+      }else if(type!="none" & type!="ridge" & type!="diff_lasso" & lambda > 0){
+        for(j in pars_pen){
+          update.pars[j] <- soft(update.pars[j],lambda,type,step=alpha,e_alpha,gamma)
+        }
+      }else if(type=="diff_lasso" & lambda > 0){
+        cc=0
+        for(j in pars_pen){
+          cc <- cc + 1
+          update.pars[j] <- update.pars[j] -
+            pen_diff[cc] - soft(pen_diff[cc],lambda,type="lasso",step=alpha,e_alpha,gamma)
+        }
+      }else if(type=="alasso" & lambda > 0){
+        for(j in pars_pen){
+          #print(update.pars[j])
+          update.pars[j] <- soft(update.pars[j]*(1/pen_vec_ml[j]),lambda,type,step=alpha,e_alpha,gamma)
+        }
+      }
 
 
 
@@ -545,7 +605,9 @@ coord_desc <- function(start,func,type,grad,hess,hessFun,pars_pen,model,lambda,m
     }else if(any(new.pars[count+1,] > par.lim[2]) | any(new.pars[count+1,] < par.lim[1])){
       break
       convergence=99
-    }else{
+    }else if(abs(vals[count+1])>100){
+      convergence=99
+      }else{
       if(st.crit==TRUE){
         convergence = 0
         #print(convergence)
