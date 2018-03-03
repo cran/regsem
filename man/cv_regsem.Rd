@@ -4,9 +4,9 @@
 \alias{cv_regsem}
 \title{The main function that runs multiple penalty values.}
 \usage{
-cv_regsem(model, n.lambda = 100, pars_pen, metric = "BIC",
-  mult.start = FALSE, multi.iter = 10, jump = 0.002, lambda.start = 0,
-  alpha = 0.5, type = "lasso", fit.ret = c("rmsea", "BIC"),
+cv_regsem(model, n.lambda = 40, pars_pen = "regressions", metric = "BIC",
+  mult.start = FALSE, multi.iter = 10, jump = 0.01, lambda.start = 0,
+  alpha = 0.5, gamma = 3.7, type = "lasso", fit.ret = c("rmsea", "BIC"),
   fit.ret2 = "train", n.boot = 20, data = NULL, optMethod = "rsolnp",
   gradFun = "ram", hessFun = "none", test.cov = NULL, prerun = FALSE,
   parallel = FALSE, ncore = 2, Start = "lavaan", subOpt = "nlminb",
@@ -15,7 +15,7 @@ cv_regsem(model, n.lambda = 100, pars_pen, metric = "BIC",
   tol = 1e-05, solver = FALSE, quasi = FALSE, solver.maxit = 5,
   alpha.inc = FALSE, step = 0.1, momentum = FALSE, step.ratio = FALSE,
   line.search = FALSE, nlminb.control = list(), warm.start = FALSE,
-  missing = "listwise", ...)
+  missing = "listwise", verbose = TRUE, ...)
 }
 \arguments{
 \item{model}{Lavaan output object. This is a model that was previously
@@ -32,7 +32,12 @@ sample covariance matrix.}
 
 \item{n.lambda}{number of penalization values to test.}
 
-\item{pars_pen}{parameter indicators to penalize.}
+\item{pars_pen}{Parameter indicators to penalize. There are multiple ways to specify.
+The default is to penalize all regression parameters ("regressions"). Additionally,
+one can specify all loadings ("loadings"), or both c("regressions","loadings").
+Next, parameter labels can be assigned in the lavaan syntax and passed to pars_pen.
+See the example.Finally, one can take the parameter numbers from the A or S matrices and pass these
+directly. See extractMatrices(lav.object)$A.}
 
 \item{metric}{Which fit index to use to choose a final model?
 Note that it chooses the best fit that also achieves convergence
@@ -48,6 +53,8 @@ regsem() (FALSE).}
 \item{lambda.start}{What value to start the penalty at}
 
 \item{alpha}{Mixture for elastic net. 1 = ridge, 0 = lasso}
+
+\item{gamma}{Additional penalty for MCP and SCAD}
 
 \item{type}{Penalty type. Options include "none", "lasso", "ridge",
 "enet" for the elastic net,
@@ -140,6 +147,8 @@ This is not recommended.}
 \item{missing}{How to handle missing data. Current options are "listwise"
 and "fiml".}
 
+\item{verbose}{Print progress bar?}
+
 \item{...}{Any additional arguments to pass to regsem() or multi_optim().}
 }
 \description{
@@ -148,6 +157,7 @@ The main function that runs multiple penalty values.
 \examples{
 \dontrun{
 library(regsem)
+vignette("overview",package="regsem")
 # put variables on same scale for regsem
 HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
 mod <- '
@@ -169,6 +179,29 @@ cv.out = cv_regsem(outt, type="lasso", pars_pen=c("l1","l2","l6","l7","l8"),
          n.lambda=5,jump=0.01)
 summary(cv.out)
 plot(cv.out, show.minimum="BIC")
+
+mod <- '
+f =~ x1 + x2 + x3 + x4 + x5 + x6
+'
+outt = cfa(mod, HS)
+# can penalize all loadings
+cv.out = cv_regsem(outt,type="lasso", pars_pen="loadings",
+                  n.lambda=5,jump=0.01)
+
+mod2 <- '
+f =~ x4+x5+x3
+#x1 ~ x7 + x8 + x9 + x2
+x1 ~ f
+x2 ~ f
+'
+outt2 = cfa(mod2, HS)
+extractMatrices(outt2)$A
+# if no pars_pen specification, defaults to all
+# regressions
+cv.out = cv_regsem(outt2,type="lasso",
+                  n.lambda=15,jump=0.03)
+# check
+cv.out$pars_pen
 }
 }
 \keyword{calc}

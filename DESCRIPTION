@@ -1,11 +1,12 @@
 Package: regsem
 Type: Package
 Title: Regularized Structural Equation Modeling
-Version: 1.0.6
+Version: 1.1.2
 Author: Ross Jacobucci[aut,cre], 
         Kevin J. Grimm [ctb], 
         Andreas M. Brandmaier [ctb],
-        Sarfaraz Serang [ctb]
+        Sarfaraz Serang [ctb],
+        Rogier A. Kievit [ctb]
 Maintainer: Ross Jacobucci <rcjacobuc@gmail.com>
 Description: Uses both ridge and lasso penalties (and extensions) to penalize
     specific parameters in structural equation models. The package offers additional
@@ -13,12 +14,14 @@ Description: Uses both ridge and lasso penalties (and extensions) to penalize
     equation models.
 License: GPL (>= 2)
 LazyData: TRUE
+VignetteBuilder: knitr
 Depends: lavaan, Rcpp
 Suggests: snowfall, MASS, GA, caret, glmnet, ISLR, lbfgs, Rsolnp,
-        numDeriv, nloptr, optimx, semPlot, colorspace
+        numDeriv, psych, knitr, nloptr, NlcOptim, optimx, semPlot,
+        colorspace
 LinkingTo: Rcpp, RcppArmadillo
 RoxygenNote: 6.0.1
 NeedsCompilation: yes
-Packaged: 2017-12-06 00:22:32 UTC; rjacobuc
+Packaged: 2018-03-03 18:18:18 UTC; rjacobuc
 Repository: CRAN
-Date/Publication: 2017-12-06 04:37:40 UTC
+Date/Publication: 2018-03-03 18:47:12 UTC

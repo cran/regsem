@@ -18,6 +18,7 @@
 #' @param lambda Penalty value. Note: higher values will result in additional
 #'        convergence issues.
 #' @param alpha Mixture for elastic net.
+#' @param gamma Additional penalty for MCP and SCAD
 #' @param LB lower bound vector. Note: This is very important to specify
 #'        when using regularization. It greatly increases the chances of
 #'        converging.
@@ -46,9 +47,12 @@
 #' @param gradFun Gradient function to use. Recommended to use "ram",
 #'        which refers to the method specified in von Oertzen & Brick (2014).
 #'        Only for use with optMethod="coord_desc".
-#' @param pars_pen Parameter indicators to penalize. If left NULL, by default,
-#'        all parameters in the \emph{A} matrix outside of the intercepts are
-#'        penalized when lambda > 0 and type != "none".
+#' @param pars_pen Parameter indicators to penalize. There are multiple ways to specify.
+#'        The default is to penalize all regression parameters ("regressions"). Additionally,
+#'        one can specify all loadings ("loadings"), or both c("regressions","loadings").
+#'        Next, parameter labels can be assigned in the lavaan syntax and passed to pars_pen.
+#'        See the example.Finally, one can take the parameter numbers from the A or S matrices and pass these
+#'        directly. See extractMatrices(lav.object)$A.
 #' @param diff_par Parameter values to deviate from. Only used when
 #'        type="diff_lasso".
 #' @param hessFun Hessian function to use. Currently not recommended.
@@ -100,6 +104,7 @@
 
 multi_optim <- function(model,max.try=10,lambda=0,
                         alpha=.5,
+                        gamma=3.7,
                          LB=-Inf,
                         UB=Inf,
                         par.lim=c(-Inf,Inf),
@@ -108,7 +113,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
                         type="lasso",
                         optMethod="rsolnp",
                         gradFun="ram",
-                        pars_pen=NULL,
+                        pars_pen="regressions",
                         diff_par=NULL,
                         hessFun="none",
                         tol=1e-5,
@@ -179,7 +184,7 @@ multi_optim <- function(model,max.try=10,lambda=0,
 
   sss = seq(1,max.try)
 
-    mult_run <- function(model,n.try=1,lambda,LB=-Inf,tol,alpha,
+    mult_run <- function(model,n.try=1,lambda,LB=-Inf,tol,alpha,gamma,
                          UB=Inf,
                          par.lim,
                          block,
@@ -227,7 +232,8 @@ multi_optim <- function(model,max.try=10,lambda=0,
        # }
 
 
-        fit1 <- suppressWarnings(try(regsem(model,lambda=lambda,alpha=alpha,type=type,optMethod=optMethod,
+        fit1 <- suppressWarnings(try(regsem(model,lambda=lambda,alpha=alpha,gamma=gamma,
+                                            type=type,optMethod=optMethod,
                                             Start=start.optim,gradFun=gradFun,hessFun=hessFun,
                                             nlminb.control=nlminb.control,tol=tol,
                                             solver=solver,
@@ -283,7 +289,8 @@ iter.optim = iter.optim + 1
 
 
 
-    ret.mult = mult_run(model,n.try=1,lambda=lambda,alpha=alpha,LB,UB,type,warm.start=warm.start,
+    ret.mult = mult_run(model,n.try=1,lambda=lambda,alpha=alpha,gamma=gamma,
+                        LB,UB,type,warm.start=warm.start,
                         nlminb.control=nlminb.control,tol=tol,
                         solver=solver,
                         quasi=quasi,
@@ -346,7 +353,9 @@ iter.optim = iter.optim + 1
       }else{
         Start="default"
       }
-      fit1 <- suppressWarnings(regsem(model,lambda=lambda,alpha=alpha,type=type,optMethod=optMethod,
+      fit1 <- suppressWarnings(regsem(model,lambda=lambda,
+                     alpha=alpha,gamma=gamma,
+                     type=type,optMethod=optMethod,
                      Start=Start,gradFun=gradFun,hessFun=hessFun,
                      nlminb.control=nlminb.control,tol=tol,
                      solver=solver,
