@@ -146,7 +146,7 @@
 cv_regsem = function(model,
                      n.lambda=40,
                      pars_pen="regressions",
-                     metric="BIC",
+                     metric=ifelse(fit.ret2=="train","BIC","chisq"),
                      mult.start=FALSE,
                      multi.iter=10,
                      jump=0.01,
@@ -154,7 +154,7 @@ cv_regsem = function(model,
                      alpha=.5,
                      gamma=3.7,
                      type="lasso",
-                     fit.ret=c("rmsea","BIC"),
+                     fit.ret=c("rmsea","BIC","chisq"),
                      fit.ret2 = "train",
                      n.boot=20,
                      data=NULL,
@@ -199,6 +199,9 @@ cv_regsem = function(model,
 fits.var=NA
 mats <- extractMatrices(model)
 
+if(metric %in% fit.ret == FALSE){
+  stop("Need to specify metric= to match one index in fit.ret")
+}
 
 pars_pen2 = NULL
 
@@ -234,7 +237,9 @@ if(any(pars_pen == "loadings")){
   #  }
  # }
 }else if(is.null(pars_pen)==FALSE & is.numeric(pars_pen)==FALSE){
-  pars_pen2 <- parse_parameters(pars_pen,model)
+  #pars_pen2 <- parse_parameters(pars_pen,model)
+  ids = which(mats$pars.align[,2] %in% pars_pen)
+  pars_pen2 = as.numeric(mats$pars.align[ids,1])
 }else if(is.numeric(pars_pen)){
   pars_pen2 = pars_pen
 }#else if(is.null(pars_pen)==TRUE){
