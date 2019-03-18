@@ -56,6 +56,7 @@
 #'        Only for use with optMethod="coord_desc".
 #' @param hessFun hessian function to use. Currently not recommended.
 #' @param test.cov Covariance matrix from test dataset. Necessary for CV=T
+#' @param test.n.obs Number of observations in test set. Used when CV=T
 #' @param prerun Logical. Use rsolnp to first optimize before passing to
 #'        gradient descent? Only for use with coord_desc
 #' @param parallel Logical. whether to parallelize the processes running models for all
@@ -75,6 +76,7 @@
 #' @param nlminb.control list of control values to pass to nlminb
 #' @param max.iter Number of iterations for coordinate descent
 #' @param tol Tolerance for coordinate descent
+#' @param round Number of digits to round results to
 #' @param solver Whether to use solver for coord_desc
 #' @param quasi Whether to use quasi-Newton
 #' @param solver.maxit Max iterations for solver in coord_desc
@@ -162,6 +164,7 @@ cv_regsem = function(model,
                     gradFun="ram",
                     hessFun="none",
                     test.cov=NULL,
+                    test.n.obs = NULL,
                     prerun=FALSE,
                     parallel=FALSE,
                     ncore=2,
@@ -176,6 +179,7 @@ cv_regsem = function(model,
                     calc="normal",
                     max.iter=2000,
                     tol=1e-5,
+                    round=3,
                     solver=FALSE,
                     quasi=FALSE,
                     solver.maxit=5,
@@ -264,6 +268,11 @@ if(is.null(pars_pen) & type!="none"){
   stop("for cv_regsem(), pars_pen needs to be specified")
 }
 
+if(fit.ret2 == "test" && is.null(test.n.obs)){
+  stop("Please provide a sample size for the test sample")
+}
+
+
 #if(is.null(pars_pen)==FALSE & is.numeric(pars_pen)==FALSE){
 #  pars_pen <- parse_parameters(pars_pen,model)
 #}
@@ -285,6 +294,7 @@ fits <- matrix(NA,n.lambda,length(fit.ret)+2)
 fit.reg <- rep(NA,n.lambda)
 fitt.var <- matrix(NA,n.lambda,length(fit.ret))
 SHRINK2 = lambda.start
+dfs = rep(NA,n.lambda)
 count = 0
 counts=n.lambda
 #res2 <- data.frame(matrix(NA,counts,3))
@@ -328,7 +338,7 @@ if(mult.start==FALSE){
   }
 
 
-  if(fit.ret2 == "train"){
+  if(fit.ret2 == "train" || fit.ret2 == "test"){
     out <- regsem(model=model,lambda=SHRINK,type=type,data=data,
                   optMethod=optMethod,
                   gradFun=gradFun,hessFun=hessFun,
@@ -346,6 +356,7 @@ if(mult.start==FALSE){
                   full=full,
                   calc=calc,
                   tol=tol,
+                  round=round,
                   solver=solver,
                   quasi=quasi,
                   solver.maxit=solver.maxit,
@@ -378,6 +389,7 @@ if(mult.start==FALSE){
                   full=full,
                   calc=calc,
                   tol=tol,
+                  round=round,
                   solver=solver,
                   quasi=quasi,
                   solver.maxit=solver.maxit,
@@ -422,6 +434,7 @@ if(mult.start==FALSE){
                   full=full,
                   calc=calc,
                   tol=tol,
+                  round=round,
                   solver=solver,
                   quasi=quasi,
                   solver.maxit=solver.maxit,
@@ -457,7 +470,14 @@ if(mult.start==FALSE){
         SampCov=cov(test)
       }
 
-      fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov,n.obs=nrow(test))$fits[fit.ret]
+      fitt.out = try(fit_indices(out2,CV=TRUE,CovMat=SampCov,n.obs=nrow(test))$fits[fit.ret],silent=T)
+
+        if(inherits(fitt.out, "try-error")) {
+          fitt[i,] = NA
+        }else{
+          fitt[i,] = fitt.out
+        }
+
 
     }else{
       fitt[i,] = NA
@@ -486,6 +506,7 @@ if(mult.start==FALSE){
                   full=full,
                   calc=calc,
                   tol=tol,
+                  round=round,
                   solver=solver,
                   quasi=quasi,
                   solver.maxit=solver.maxit,
@@ -530,6 +551,7 @@ if(mult.start==FALSE){
                      full=full,
                      calc=calc,
                      tol=tol,
+                     round=round,
                      solver=solver,
                      quasi=quasi,
                      solver.maxit=solver.maxit,
@@ -598,12 +620,13 @@ if(mult.start==FALSE){
 
 
 
-    if(fit.ret2 == "train"){
+    if(fit.ret2 == "train" || fit.ret2 == "test"){
       out <- multi_optim(model=model,max.try=multi.iter,lambda=SHRINK,
                       LB=LB,UB=UB,par.lim=par.lim,
                       type=type,optMethod=optMethod,
                       gradFun=gradFun,hessFun=hessFun,
                       tol=tol,
+                      round=round,
                       alpha=alpha,
                       gamma=gamma,
                       solver=solver,
@@ -628,6 +651,7 @@ if(mult.start==FALSE){
                          type=type,optMethod=optMethod,
                          gradFun=gradFun,hessFun=hessFun,
                          tol=tol,
+                         round=round,
                          alpha=alpha,
                          gamma=gamma,
                          solver=solver,prerun=prerun,
@@ -665,6 +689,7 @@ if(mult.start==FALSE){
                            type=type,optMethod=optMethod,
                            gradFun=gradFun,hessFun=hessFun,
                            tol=tol,
+                           round=round,
                            alpha=alpha,prerun=prerun,
                            gamma=gamma,
                            solver=solver,
@@ -705,7 +730,7 @@ if(mult.start==FALSE){
             SampCov=cov(test)
           }
 
-          fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov)$fits[fit.ret]
+          fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov,n.obs=nrow(test))$fits[fit.ret]
 
         }else{
           fitt[i,] = NA
@@ -723,6 +748,7 @@ if(mult.start==FALSE){
                          type=type,optMethod=optMethod,
                          gradFun=gradFun,hessFun=hessFun,
                          tol=tol,
+                         round=round,
                          alpha=alpha,
                          gamma=gamma,
                          solver=solver,
@@ -760,6 +786,7 @@ if(mult.start==FALSE){
                             type=type,optMethod=optMethod,
                             gradFun=gradFun,hessFun=hessFun,
                             tol=tol,
+                            round=round,
                             alpha=alpha,prerun=prerun,
                             gamma=gamma,
                             solver=solver,
@@ -799,7 +826,7 @@ if(mult.start==FALSE){
             SampCov=cov(test)
           }
 
-          fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov)$fits[fit.ret]
+          fitt[i,] = fit_indices(out2,CV=TRUE,CovMat=SampCov,n.obs=nrow(test))$fits[fit.ret]
 
         }else{
           fitt[i,] = NA
@@ -828,7 +855,7 @@ if(mult.start==FALSE){
    # stop("fit.ret2=test is currently not implemented")
     #print(summary(out))
 
-    fitt = try(fit_indices(out,CovMat=test.cov,CV=TRUE)$fits[fit.ret],silent=T)
+    fitt = try(fit_indices(out,CovMat=test.cov,CV=TRUE, n.obs = test.n.obs)$fits[fit.ret],silent=T)
     if(inherits(fitt, "try-error")) {
 
       fits[count,3:ncol(fits)] = rep(NA,ncol(fits)-2)
@@ -854,6 +881,7 @@ if(mult.start==FALSE){
     break
   }
   par.matrix[count,] = as.matrix(out$coefficients)
+  dfs[count] = out$df
 
   colnames(par.matrix) = names(out$coefficients)
   colnames(fits) <- c("lambda","conv",fit.ret)
@@ -867,7 +895,7 @@ if(mult.start==FALSE){
 
   final_pars = par.matrix[loc,]
 
-  out2 <- list(par.matrix,fits,final_pars,pars_pen,metric) #fitt_var
+  out2 <- list(par.matrix,fits,final_pars,pars_pen,dfs,metric) #fitt_var
  # ret
 
 }
@@ -902,6 +930,7 @@ if(mult.start==FALSE){
                     calc=calc,
                     nlminb.control=nlminb.control,
                     tol=tol,
+                    round=round,
                     full=full,
                     block=block,
                     solver=solver,
@@ -920,6 +949,7 @@ if(mult.start==FALSE){
                          LB=LB,UB=UB,type=type,optMethod=optMethod,
                          gradFun=gradFun,hessFun=hessFun,nlminb.control=nlminb.control,
                          tol=tol,
+                         round=round,
                          full=full,
                          alpha=alpha,
                          gamma=gamma,
@@ -949,7 +979,7 @@ if(mult.start==FALSE){
 
     }else if(fit.ret2 == "test"){
       # stop("fit.ret2=test is currently not implemented")
-      fitt = try(fit_indices(out,CovMat=test.cov,CV=TRUE)$fits[fit.ret],silent=T)
+      fitt = try(fit_indices(out,CovMat=test.cov,CV=TRUE, n.obs = test.n.obs)$fits[fit.ret],silent=T)
       if(inherits(fitt, "try-error")) {
         fitss = rep(NA,ncol(fits)-2)
       }else{
@@ -1015,7 +1045,7 @@ if(mult.start==FALSE){
 #out2$pars_pen <- pars_pen
 out2$call <- match.call()
 class(out2) <- "cvregsem"
-names(out2) <- c("parameters","fits","final_pars","pars_pen","metric","call")#"fit_variance"
+names(out2) <- c("parameters","fits","final_pars","pars_pen","df","metric","call")#"fit_variance"
 out2
 
 #close(pb)

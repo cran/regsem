@@ -12,7 +12,7 @@ regsem(model, lambda = 0, alpha = 0.5, gamma = 3.7, type = "lasso",
   longMod = F, pars_pen = "regressions", diff_par = NULL,
   LB = -Inf, UB = Inf, par.lim = c(-Inf, Inf), block = TRUE,
   full = TRUE, calc = "normal", max.iter = 500, tol = 1e-05,
-  solver = FALSE, quasi = FALSE, solver.maxit = 5,
+  round = 3, solver = FALSE, quasi = FALSE, solver.maxit = 5,
   alpha.inc = FALSE, line.search = FALSE, step = 0.1,
   momentum = FALSE, step.ratio = FALSE, nlminb.control = list(),
   missing = "listwise")
@@ -116,6 +116,8 @@ for use.}
 \item{max.iter}{Number of iterations for coordinate descent}
 
 \item{tol}{Tolerance for coordinate descent}
+
+\item{round}{Number of digits to round results to}
 
 \item{solver}{Whether to use solver for coord_desc}
 

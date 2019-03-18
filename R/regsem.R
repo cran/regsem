@@ -78,6 +78,7 @@
 #' @param nlminb.control list of control values to pass to nlminb
 #' @param max.iter Number of iterations for coordinate descent
 #' @param tol Tolerance for coordinate descent
+#' @param round Number of digits to round results to
 #' @param solver Whether to use solver for coord_desc
 #' @param quasi Whether to use quasi-Newton
 #' @param solver.maxit Max iterations for solver in coord_desc
@@ -152,6 +153,7 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,opt
                  calc="normal",
                  max.iter=500,
                  tol=1e-5,
+                 round=3,
                  solver=FALSE,
                  quasi=FALSE,
                  solver.maxit=5,
@@ -175,13 +177,13 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,opt
   match.arg(type,c("lasso","none","ridge","scad","alasso","mcp","diff_lasso","enet"))
 
 
-  if(type == "mcp" & optMethod!= "coord_desc"){
-    stop("For both scad and mcp must use optMethod=coord_desc")
-  }
+ # if(type == "mcp" & optMethod!= "coord_desc"){
+  #  stop("For both scad and mcp must use optMethod=coord_desc")
+ # }
 
-  if(type == "scad" & optMethod != "coord_desc"){
-    stop("For both scad and mcp must use optMethod=coord_desc")
-  }
+ # if(type == "scad" & optMethod != "coord_desc"){
+ #   stop("For both scad and mcp must use optMethod=coord_desc")
+ # }
 
 
 
@@ -343,11 +345,11 @@ pars_pen = as.numeric(pars_pen2)
 
 
 
-      # get mediation parameters
-      if(any(is.na(mats$mediation))==FALSE){
-        mediation_vals <- mats$mediation
+      # get defined parameters
+      if(any(is.na(mats$defined_params))==FALSE){
+        defined_params_vals <- mats$defined_params
       }else{
-        mediation_vals <- NA
+        defined_params_vals <- NA
       }
 
       if(missing=="listwise"){
@@ -382,7 +384,7 @@ pars_pen = as.numeric(pars_pen2)
       #stop("FIML is currently not supported at this time")
       calc_fit = "ind"
       SampCov <- model@SampleStats@cov[][[1]]
-      mediation_vals <- NA
+      defined_params_vals <- NA
 
       nobs = model@SampleStats@nobs[[1]][1]
      # if(is.null(data)==TRUE){
@@ -1067,8 +1069,8 @@ if(optMethod=="nlminb"){
       #pars = A_est[A_estim]
       pars_sum = pars.df[pars_pen]
       pars_l2 = sqrt(pars_sum**2)
-      res$df = df + sum(pars_l2 < 0.001)
-      res$npar = npar - sum(pars_l2 < 0.001)
+      res$df = df + sum(pars_l2 < 1/(10^round))
+      res$npar = npar - sum(pars_l2 < 1/(10^round))
 
     }else if(type=="ridge" | alpha == 1){
       #ratio1 <- sqrt(pars.df[pars_pen]**2)/sqrt(mats$parameters[pars_pen]**2)
@@ -1132,7 +1134,7 @@ if(optMethod=="nlminb"){
 
     res$data <- as.data.frame(model@Data@X)
 
-    res$coefficients <- round(pars.df,3)
+    res$coefficients <- round(pars.df,round)
     res$nvar = nvar
     res$N = nobs
     res$nfac = nfac
@@ -1148,7 +1150,7 @@ if(optMethod=="nlminb"){
     #res$grad <- grad(res$par.ret)
 
    # res$hess <- hess(as.numeric(res$par.ret))
-    if(any(is.na(mediation_vals))==FALSE){
+    if(any(is.na(defined_params_vals))==FALSE){
 
       rettt = rcpp_RAMmult(par=as.numeric(pars.df),A,S,S_fixed,A_fixed,A_est,S_est,F,I)
        A_est <- rettt$A_est22
@@ -1157,7 +1159,7 @@ if(optMethod=="nlminb"){
 
        #S_new <- S
 
-     ppars <- mediation_vals$pars.mult
+     ppars <- defined_params_vals$pars.mult
 
      #mediation_vals
 
@@ -1169,14 +1171,15 @@ if(optMethod=="nlminb"){
     val <- rep(NA,nrow(parT[par.labels,]))
 
     for(i in 1:nrow(parT[par.labels,])){
-      par <- parT$label[i]
-      par.num <- parT$free[i]
+      pp = parT[par.labels,]
+      par <- pp[i,"label"]
+      par.num <- pp[i,"free"]
 
 
-        if(any(A==par.num)){
-        val[i] <- round(A_est[A==par.num],3)
-        }else if(any(S==par.num)){
-        val[i] <- round(S_est[S==par.num],3)
+        if(any(A==par.num & par.num != 0)){
+        val[i] <- round(A_est[A==par.num],round)
+        }else if(any(S==par.num & par.num != 0)){
+        val[i] <- round(S_est[S==par.num],round)
         }
     }
 
@@ -1194,15 +1197,15 @@ if(optMethod=="nlminb"){
    }
 
 
-   ppars <- mediation_vals$pars.mult
+   ppars <- defined_params_vals$pars.mult
 
    for(i in 1:length(ppars)){
      first <- paste("=",return.vals[i])
      ppars[i] <- paste(ppars[i],first)
    }
 
-   res$mediation <- ppars
-   res$mediation_vals <- return.vals
+   res$defined_params <- ppars
+   res$defined_params_vals <- return.vals
 
 
     }

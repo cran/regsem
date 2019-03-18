@@ -10,11 +10,12 @@ cv_regsem(model, n.lambda = 40, pars_pen = "regressions",
   lambda.start = 0, alpha = 0.5, gamma = 3.7, type = "lasso",
   fit.ret = c("rmsea", "BIC", "chisq"), fit.ret2 = "train",
   n.boot = 20, data = NULL, optMethod = "rsolnp", gradFun = "ram",
-  hessFun = "none", test.cov = NULL, prerun = FALSE,
-  parallel = FALSE, ncore = 2, Start = "lavaan", subOpt = "nlminb",
-  diff_par = NULL, LB = -Inf, UB = Inf, par.lim = c(-Inf, Inf),
-  block = TRUE, full = TRUE, calc = "normal", max.iter = 2000,
-  tol = 1e-05, solver = FALSE, quasi = FALSE, solver.maxit = 5,
+  hessFun = "none", test.cov = NULL, test.n.obs = NULL,
+  prerun = FALSE, parallel = FALSE, ncore = 2, Start = "lavaan",
+  subOpt = "nlminb", diff_par = NULL, LB = -Inf, UB = Inf,
+  par.lim = c(-Inf, Inf), block = TRUE, full = TRUE,
+  calc = "normal", max.iter = 2000, tol = 1e-05, round = 3,
+  solver = FALSE, quasi = FALSE, solver.maxit = 5,
   alpha.inc = FALSE, step = 0.1, momentum = FALSE,
   step.ratio = FALSE, line.search = FALSE, nlminb.control = list(),
   warm.start = FALSE, missing = "listwise", verbose = TRUE, ...)
@@ -93,6 +94,8 @@ Only for use with optMethod="coord_desc".}
 
 \item{test.cov}{Covariance matrix from test dataset. Necessary for CV=T}
 
+\item{test.n.obs}{Number of observations in test set. Used when CV=T}
+
 \item{prerun}{Logical. Use rsolnp to first optimize before passing to
 gradient descent? Only for use with coord_desc}
 
@@ -124,6 +127,8 @@ for use.}
 \item{max.iter}{Number of iterations for coordinate descent}
 
 \item{tol}{Tolerance for coordinate descent}
+
+\item{round}{Number of digits to round results to}
 
 \item{solver}{Whether to use solver for coord_desc}
 
