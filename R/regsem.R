@@ -27,7 +27,11 @@
 #'        parameter estimates and some pre-specified values. The values
 #'        to take the deviation from are specified in diff_par. Two methods for
 #'        sparser results than lasso are the smooth clipped absolute deviation,
-#'        "scad", and the minimum concave penalty, "mcp".
+#'        "scad", and the minimum concave penalty, "mcp". Last option is "rlasso"
+#'        which is the randomised lasso to be used for stability selection.
+#' @param random.alpha Alpha parameter for randomised lasso. Has to be between
+#'        0 and 1, with a default of 0.5. Note this is only used for
+#'        "rlasso", which pairs with stability selection.
 #' @param data Optional dataframe. Only required for missing="fiml" which
 #'        is not currently working.
 #' @param optMethod Solver to use. Two main options for use: rsoolnp and coord_desc.
@@ -139,7 +143,9 @@
 
 
 
-regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,optMethod="rsolnp",
+regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",
+                  random.alpha=0.5,
+                  data=NULL,optMethod="rsolnp",
                   estimator="ML",
                  gradFun="ram",hessFun="none",prerun=FALSE,parallel="no",Start="lavaan",
                  subOpt="nlminb",longMod=F,
@@ -172,9 +178,11 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,opt
   }
 
 
+
+
   if (class(model)!="lavaan") stop("Input is not a 'lavaan' object")
 
-  match.arg(type,c("lasso","none","ridge","scad","alasso","mcp","diff_lasso","enet"))
+  match.arg(type,c("lasso","none","ridge","scad","alasso","mcp","diff_lasso","enet","rlasso","rlasso2"))
 
 
  # if(type == "mcp" & optMethod!= "coord_desc"){
@@ -245,7 +253,13 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,opt
     # }
   }else if(is.null(pars_pen)==FALSE & is.numeric(pars_pen)==FALSE){
     #pars_pen2 <- parse_parameters(pars_pen,model)
+
     ids = which(mats$pars.align[,2] %in% pars_pen)
+
+    if(length(ids) != length(pars_pen)){
+      stop("Have to specify parameter number in pars_pen for equality constrained labels")
+    }
+
     pars_pen2 = as.numeric(mats$pars.align[ids,1])
 
   }else if(is.numeric(pars_pen)){
@@ -265,6 +279,13 @@ regsem = function(model,lambda=0,alpha=0.5,gamma=3.7, type="lasso",data=NULL,opt
 
 
 pars_pen = as.numeric(pars_pen2)
+
+if(type=="rlasso"){
+  ralpha <- runif(length(pars_pen),random.alpha,1) # can alter and add argument
+}
+if(type=="rlasso2"){
+  ralpha <- runif(length(pars_pen),0,random.alpha) # can alter and add argument
+}
 
 #  if(optMethod=="nlminb"& type !="ridge" | type != "none"){
 #    stop("Only optMethod=coord_desc is recommended for use")
@@ -417,6 +438,10 @@ pars_pen = as.numeric(pars_pen2)
       type2=4
     }else if(type=="alasso"){ ## try just creating new pen_vec
       type2=1
+    }else if(type=="rlasso"){ ## try just creating new pen_vec
+        type2=1
+    }else if(type=="rlasso2"){ ## try just creating new pen_vec
+      type2=5
     }else if(type=="scad"){
       type2=6
     }else if(type=="mcp"){
@@ -488,6 +513,14 @@ pars_pen = as.numeric(pars_pen2)
            pen_vec_ml = c(mats$A_est[match(pars_pen,A,nomatch=0)],mats$S_est[match(pars_pen,S,nomatch=0)])
            pen_vec = abs(pen_vec)*(1/(abs(pen_vec_ml)))
          }
+         if(type=="rlasso"){
+           pen_vec = abs(pen_vec)/ralpha
+         }
+         if(type=="rlasso2"){
+           rlasso_pen = sum((ralpha + lambda) * abs(pen_vec))
+         }else{
+           rlasso_pen=0
+         }
 
          if(calc_fit=="cov"){
 
@@ -496,7 +529,7 @@ pars_pen = as.numeric(pars_pen2)
              imp_vec = mult$ImpCov[lower.tri(mult$ImpCov)]
            }
            fit = rcpp_fit_fun(ImpCov=mult$ImpCov,SampCov,type2,lambda,gamma,
-                              pen_vec,pen_diff,e_alpha)#,estimator2,poly_vec,imp_vec)
+                              pen_vec,pen_diff,e_alpha,rlasso_pen)#,estimator2,poly_vec,imp_vec)
           # print(fit)
            #print(fit)
           # print(type2)
@@ -1064,7 +1097,7 @@ if(optMethod=="nlminb"){
     if(type=="none" | lambda==0){
       res$df = df
       res$npar = npar
-    }else if(type=="lasso" | type=="alasso" | type=="enet" | type=="scad" | type=="mcp" & alpha < 1){
+    }else if(type=="lasso" | type=="alasso" | type=="rlasso" | type=="rlasso2" | type=="enet" | type=="scad" | type=="mcp" & alpha < 1){
       #A_estim = A != 0
       #pars = A_est[A_estim]
       pars_sum = pars.df[pars_pen]
@@ -1107,7 +1140,7 @@ if(optMethod=="nlminb"){
         imp_vec = Imp_Cov1[lower.tri(Imp_Cov1)]
       }
       res$fit = rcpp_fit_fun(Imp_Cov1, SampCov,type2=0,lambda=0,pen_vec=0,
-                             pen_diff=pen_diff,e_alpha=0,gamma=0)#,
+                             pen_diff=pen_diff,e_alpha=0,gamma=0,rlasso_pen=0)#,
                            #  estimator2,poly_vec,imp_vec)
     }else if(missing == "fiml" & type == "none"){
       #print(res$optim_fit)
@@ -1123,7 +1156,7 @@ if(optMethod=="nlminb"){
 
       res$fit = rcpp_fit_fun(ImpCov=Imp_Cov,SampCov,
                              type2,lambda,pen_vec=0,
-                             pen_diff=0,e_alpha=0,gamma=0)
+                             pen_diff=0,e_alpha=0,gamma=0,rlasso_pen=0)
                             # estimator2,poly_vec,imp_vec)
 
     }
