@@ -116,15 +116,15 @@
 #' @keywords optim calc
 #' @useDynLib regsem, .registration=TRUE
 #' @import Rcpp
+#' @import parallel
 #' @import lavaan
 #' @import Rsolnp
-#' @importFrom stats cov na.omit nlminb pchisq rnorm runif sd uniroot var weighted.mean cov2cor
+#' @importFrom stats cov na.omit nlminb pchisq rnorm runif sd uniroot var weighted.mean cov2cor quantile
 #' @importFrom graphics abline lines plot points par
 #' @importFrom utils setTxtProgressBar txtProgressBar
 #' @export
 #' @examples
 #' # Note that this is not currently recommended. Use cv_regsem() instead
-#' # vignette("overview",package="regsem")
 #' library(lavaan)
 #' # put variables on same scale for regsem
 #' HS <- data.frame(scale(HolzingerSwineford1939[,7:15]))
