@@ -323,9 +323,11 @@ iter.optim = iter.optim + 1
 
 
     if(warm.start == TRUE & ret.mult$mtt[1,1] > 0){
+
       Start2 = ret.mult$start.vals +
         c(rep(0,val1) + rnorm(val1,0,0.01),abs(rep(0,val2) + rnorm(val2,0,0.001)))
     }else{
+
       Start2 = c(rep(0,val1) + rnorm(val1,0,0.1),abs(rep(0.5,val2) + rnorm(val2,0,0.1)))
     }
 
@@ -334,10 +336,10 @@ iter.optim = iter.optim + 1
 
     if(verbose==TRUE) print(c(iter.optim,outt[,1],outt[,2]))
 
-      if(all(is.na(outt[,2])==TRUE)){
+  if(all(is.na(outt[,2])==TRUE)){
         return(NA)
-      }else if(any(na.omit(outt[,2]) == 0)){
-        if(any(is.na(outt[,1]) == FALSE & outt[,1] < 999999 & outt[,1] > 0)){
+   }else if(any(na.omit(outt[,2]) == 0)){
+    #if(any(is.na(outt[,1]) == FALSE & outt[,1] < 999999 & outt[,1] > 0)){
        # row = which(outt[,1] == min(outt[which(is.na(outt[,1]) == FALSE & outt[,1] > 0 & outt[,2] == 0)]))[1]
        # set.seed(outt[row,3])
       #  if(warm.start==FALSE){
@@ -352,14 +354,16 @@ iter.optim = iter.optim + 1
          #              LB=LB,UB=UB,pars_pen=pars_pen,diff_par=diff_par,tol=tol))
         return(ret.mult$fit1)
         break
-        }else{
-          return(NA)
-        }
-      }else{
-        return(NA)
-      }
-    }
-   # if(exists("fit1")==FALSE){
+      # }else{
+      #    return(NA)
+      # }
+    }#else{
+    #    return(NA)
+  # }
+}
+
+
+    if(exists("fit1")==FALSE){
 
       if(warm.start==TRUE){
         Start=Start2
@@ -369,7 +373,6 @@ iter.optim = iter.optim + 1
       fit1 <- suppressWarnings(regsem(model,lambda=lambda,
                      alpha=alpha,gamma=gamma,
                      random.alpha=random.alpha,
-                     type=type,optMethod=optMethod,
                      Start=Start,gradFun=gradFun,hessFun=hessFun,
                      nlminb.control=nlminb.control,tol=tol,
                      solver=solver,
@@ -389,7 +392,7 @@ iter.optim = iter.optim + 1
 
         fit1$convergence <- 99
         return(fit1)
-   # }
+    }
 
 
 

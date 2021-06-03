@@ -310,6 +310,10 @@ if(type=="rlasso2"){
     stop("need to change missing=fiml in lavaan")
   }
 
+  if(missing=="fiml" & model@Model@meanstructure==F){#(model@call$meanstructure==FALSE | model@call$fixed.x==TRUE)){
+    stop("need to change meanstructure=TRUE and fixed.x==FALSE in lavaan when missing='fiml'")
+  }
+
 #  if(gradFun != "none" & missing=="fiml"){
 #    stop("only gradFun = none is supported with missing data")
 #  }
@@ -444,7 +448,7 @@ if(type=="rlasso2"){
     }else if(type=="alasso"){ ## try just creating new pen_vec
       type2=1
     }else if(type=="rlasso"){ ## try just creating new pen_vec
-        type2=1
+      type2=1
     }else if(type=="rlasso2"){ ## try just creating new pen_vec
       type2=5
     }else if(type=="scad"){
@@ -556,17 +560,21 @@ if(type=="rlasso2"){
            #print(fit)
            fit
          }else if(calc_fit=="ind"){
-           stop("Not currently supported")
+           #stop("Not currently supported")
            #print(mult$ImpCov)
 
            #fit = fiml_calc(ImpCov=mult$ImpCov,mu.hat=model@SampleStats@missing.h1[[1]]$mu,
            #                h1=model@SampleStats@missing.h1[[1]]$h1,
            #                Areg=mult$A_est22,lambda,alpha,type,pen_vec,nvar,
            #                lav.miss=model@SampleStats@missing[[1]])
-          # fit = fiml_calc2(ImpCov=mult$ImpCov,F,mats2=mult,
-          #                 type=type,lambda=lambda,
-          #                 model=model,sat.lik=sat.lik,
-          #                 pen_vec=pen_vec)
+           #fit = fiml_calc2(ImpCov=mult$ImpCov,F,mats2=mult,
+           #                 type=type,lambda=lambda,
+           #                 model=model,sat.lik=sat.lik,
+           #                 pen_vec=pen_vec)
+           fit = fiml_calc4(ImpCov=mult$ImpCov,F,mats2=mult,
+                            type=type,lambda=lambda,
+                            model=model,#sat.lik=sat.lik,
+                            pen_vec=pen_vec)
          }
 
     }
