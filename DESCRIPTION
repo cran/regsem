@@ -1,7 +1,7 @@
 Package: regsem
 Type: Package
 Title: Regularized Structural Equation Modeling
-Version: 1.8.0
+Version: 1.9.3
 Author: Ross Jacobucci[aut,cre], 
         Kevin J. Grimm [ctb], 
         Andreas M. Brandmaier [ctb],
@@ -15,6 +15,8 @@ Description: Uses both ridge and lasso penalties (and extensions) to penalize
     specific parameters in structural equation models. The package offers additional
     cost functions, cross validation, and other extensions beyond traditional structural
     equation models. Also contains a function to perform exploratory mediation (XMed). 
+URL: https://github.com/Rjacobucci/regsem/
+BugReports: https://github.com/Rjacobucci/regsem/issues/
 License: GPL (>= 2)
 VignetteBuilder: knitr
 Depends: lavaan, Rcpp, Rsolnp
@@ -22,8 +24,8 @@ Suggests: snowfall, markdown, MASS, GA, caret, glmnet, ISLR, lbfgs,
         numDeriv, psych, knitr, nloptr, NlcOptim, optimx, semPlot,
         colorspace, plyr, matrixStats, stringr
 LinkingTo: Rcpp, RcppArmadillo
-RoxygenNote: 7.1.1
+RoxygenNote: 7.2.1
 NeedsCompilation: yes
-Packaged: 2021-06-03 14:23:49 UTC; rjacobuc
+Packaged: 2022-08-23 17:49:26 UTC; rjacobuc
 Repository: CRAN
-Date/Publication: 2021-06-03 15:00:02 UTC
+Date/Publication: 2022-08-23 18:10:02 UTC
